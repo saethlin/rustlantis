@@ -189,6 +189,62 @@ impl Backend for LLVM {
     }
 }
 
+pub struct LLUBI {
+    toolchain: Option<String>,
+    llubi_path: String,
+    codegen_opt: OptLevel,
+    mir_opt: OptLevel,
+}
+
+impl LLUBI {
+    pub fn new(toolchain: Option<String>, llubi_path: String, codegen_opt: OptLevel, mir_opt: OptLevel) -> Self {
+        Self {
+            toolchain,
+            llubi_path,
+            codegen_opt,
+            mir_opt,
+        }
+    }
+}
+
+impl Backend for LLUBI {
+    fn compile(&self, source: &Source, target: &Path) -> ProcessOutput {
+        let mut command = Command::new("rustc");
+        if let Some(toolchain) = &self.toolchain {
+            command.arg(format!("+{}", toolchain));
+        }
+
+        command
+            .args(["-o", target.to_str().unwrap()])
+            .args([
+                "-C",
+                &format!("opt-level={}", self.codegen_opt.codegen_opt_level()),
+            ])
+            .args([
+                "-Z",
+                &format!("mir-opt-level={}", self.mir_opt.mir_opt_level()),
+            ])
+            .arg("--emit=llvm-ir");
+        run_compile_command(command, source).into()
+    }
+
+    fn execute(&self, source: &Source, target: &Path) -> ExecResult {
+        debug!("Compiling {source}");
+        let compile_out = self.compile(source, target);
+        if !compile_out.status.success() {
+            return Err(CompExecError(compile_out));
+        }
+
+        debug!("Executing compiled {source}");
+        let exec_out = Command::new(self.llubi_path.clone())
+            .arg(target)
+            .arg("--rust")
+            .output()
+            .expect("can execute target program and get output");
+        Ok(exec_out.into())
+    }
+}
+
 enum BackendSource {
     Path(PathBuf),
     Rustup(String),

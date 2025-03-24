@@ -6,7 +6,7 @@ use std::{collections::HashMap, io::{self, Read}, path::PathBuf, process::ExitCo
 use clap::{Arg, Command};
 use config::Config;
 use difftest::{
-    backends::{Backend, Cranelift, Miri, OptLevel, GCC, LLVM},
+    backends::{Backend, Cranelift, Miri, OptLevel, GCC, LLUBI, LLVM},
     run_diff_test, BackendName, Source,
 };
 use log::{debug, error, info};
@@ -80,11 +80,23 @@ fn main() -> ExitCode {
     backends.insert(
         "llvm-opt-only",
         Box::new(LLVM::new(
-            llvm_toolchain,
+            llvm_toolchain.clone(),
             OptLevel::Optimised,
             OptLevel::Unoptimised,
         )),
     );
+
+    if let Ok(llubi) = settings.get_string("llubi_path") {
+        backends.insert(
+            "llvm-opt-llubi",
+            Box::new(LLUBI::new(
+                llvm_toolchain,
+                llubi,
+                OptLevel::Optimised,
+                OptLevel::Optimised,
+            )),
+        );
+    }
 
     let source = if source == "-" {
         let mut code = String::new();
