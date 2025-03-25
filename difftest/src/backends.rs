@@ -239,6 +239,7 @@ impl Backend for LLUBI {
         let exec_out = Command::new(self.llubi_path.clone())
             .arg(target)
             .arg("--rust")
+            .arg("--ignore-param-attrs-intrinsic")
             .output()
             .expect("can execute target program and get output");
         Ok(exec_out.into())
