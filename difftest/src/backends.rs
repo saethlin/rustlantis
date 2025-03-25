@@ -224,6 +224,7 @@ impl Backend for LLUBI {
                 "-Z",
                 &format!("mir-opt-level={}", self.mir_opt.mir_opt_level()),
             ])
+            .arg("-Zfewer-names")
             .arg("--emit=llvm-ir");
         run_compile_command(command, source).into()
     }
@@ -240,6 +241,7 @@ impl Backend for LLUBI {
             .arg(target)
             .arg("--rust")
             .arg("--ignore-param-attrs-intrinsic")
+            .arg("--ignore-explicit-lifetime-marker")
             .output()
             .expect("can execute target program and get output");
         Ok(exec_out.into())
