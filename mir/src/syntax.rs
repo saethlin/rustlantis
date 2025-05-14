@@ -719,7 +719,7 @@ impl Program {
         "#[custom_mir(dialect = \"runtime\", phase = \"initial\")]";
     pub const HEADER: &'static str = "#![recursion_limit = \"1024\"]
     #![feature(custom_mir, core_intrinsics, lazy_get)]
-    #![allow(unused_parens, unused_assignments, overflowing_literals)]
+    #![allow(unused_parens, unused_assignments, overflowing_literals, internal_features, static_mut_refs)]
     extern crate core;
     use core::intrinsics::mir::*;\n";
 
