@@ -180,6 +180,7 @@ impl Backend for LLVM {
                 "-C",
                 &format!("opt-level={}", self.codegen_opt.codegen_opt_level()),
             ])
+            .arg("-Ctarget-cpu=native")
             .args(["-C", "llvm-args=-protect-from-escaped-allocas=true"]) // https://github.com/rust-lang/rust/issues/112213
             .args([
                 "-Z",
@@ -197,7 +198,12 @@ pub struct LLUBI {
 }
 
 impl LLUBI {
-    pub fn new(toolchain: Option<String>, llubi_path: String, codegen_opt: OptLevel, mir_opt: OptLevel) -> Self {
+    pub fn new(
+        toolchain: Option<String>,
+        llubi_path: String,
+        codegen_opt: OptLevel,
+        mir_opt: OptLevel,
+    ) -> Self {
         Self {
             toolchain,
             llubi_path,
@@ -257,6 +263,7 @@ pub struct Miri {
     miri: BackendSource,
     sysroot: PathBuf,
     check_ub: bool,
+    mir_opt: OptLevel,
 }
 
 impl Miri {
@@ -352,15 +359,21 @@ impl Miri {
             miri: BackendSource::Path(miri_dir.join("target/release/miri")),
             sysroot,
             check_ub,
+            mir_opt: OptLevel::Unoptimised,
         })
     }
 
-    pub fn from_rustup(toolchain: &str, check_ub: bool) -> Result<Self, BackendInitError> {
+    pub fn from_rustup(
+        toolchain: &str,
+        check_ub: bool,
+        mir_opt: OptLevel,
+    ) -> Result<Self, BackendInitError> {
         let sysroot = Self::find_sysroot(&BackendSource::Rustup(toolchain.to_owned()))?;
         Ok(Self {
             miri: BackendSource::Rustup(toolchain.to_owned()),
             sysroot,
             check_ub,
+            mir_opt,
         })
     }
 }
@@ -384,6 +397,8 @@ impl Backend for Miri {
                 .arg("-Zmiri-disable-validation")
                 .arg("-Zmiri-disable-alignment-check");
         }
+        command.arg(&format!("-Zmir-opt-level={}", self.mir_opt.mir_opt_level()));
+
         command
             .clear_env(&["PATH", "DEVELOPER_DIR"])
             .args([OsStr::new("--sysroot"), self.sysroot.as_os_str()]);

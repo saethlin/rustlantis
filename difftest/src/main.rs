@@ -1,7 +1,13 @@
 #![feature(iter_intersperse)]
 
 use core::panic;
-use std::{collections::HashMap, io::{self, Read}, path::PathBuf, process::ExitCode, str::FromStr};
+use std::{
+    collections::HashMap,
+    io::{self, Read},
+    path::PathBuf,
+    process::ExitCode,
+    str::FromStr,
+};
 
 use clap::{Arg, Command};
 use config::Config;
@@ -51,13 +57,23 @@ fn main() -> ExitCode {
             backends.insert("miri-unchecked", Box::new(miri));
         }
     } else if let Ok(miri_toolchain) = settings.get_string("miri_toolchain") {
-        let miri = Miri::from_rustup(&miri_toolchain, check_ub).expect("miri init failed");
+        let miri = Miri::from_rustup(&miri_toolchain, check_ub, OptLevel::Unoptimised).expect("miri init failed");
         if check_ub {
             backends.insert("miri-checked", Box::new(miri));
         } else {
             backends.insert("miri-unchecked", Box::new(miri));
         }
     }
+
+    if let Ok(miri_toolchain) = settings.get_string("miri_toolchain") {
+        let miri = Miri::from_rustup(&miri_toolchain, check_ub, OptLevel::Optimised).expect("miri init failed");
+        if check_ub {
+            backends.insert("miri-checked-opt", Box::new(miri));
+        } else {
+            backends.insert("miri-unchecked-opt", Box::new(miri));
+        }
+    }
+
 
     if let Ok(cg_gcc) = settings.get_string("cg_gcc_dir") {
         let cg_gcc = GCC::from_built_repo(cg_gcc, OptLevel::Optimised, OptLevel::Optimised);
@@ -69,11 +85,11 @@ fn main() -> ExitCode {
 
     let llvm_toolchain = settings.get_string("llvm_toolchain").ok();
     backends.insert(
-        "llvm-opt",
+        "llvm-no-opts",
         Box::new(LLVM::new(
             llvm_toolchain.clone(),
-            OptLevel::Optimised,
-            OptLevel::Optimised,
+            OptLevel::Unoptimised,
+            OptLevel::Unoptimised,
         )),
     );
 
@@ -100,7 +116,9 @@ fn main() -> ExitCode {
 
     let source = if source == "-" {
         let mut code = String::new();
-        io::stdin().read_to_string(&mut code).expect("can read source code from stdin");
+        io::stdin()
+            .read_to_string(&mut code)
+            .expect("can read source code from stdin");
         Source::Stdin(code)
     } else {
         Source::File(PathBuf::from_str(source).expect("is valid path"))
@@ -123,10 +141,7 @@ fn main() -> ExitCode {
         ExitCode::SUCCESS
     } else {
         let results = results.to_string();
-        error!(
-            "{} didn't pass:\n{results}",
-            source,
-        );
+        error!("{} didn't pass:\n{results}", source,);
         ExitCode::FAILURE
     }
 }

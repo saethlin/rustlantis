@@ -65,9 +65,7 @@ impl TySelect {
                 TyKind::Int(..) => Some(p_ints / TyKind::INTS.len() as f32),
                 TyKind::Uint(..) => Some(p_ints / TyKind::INTS.len() as f32),
                 TyKind::Float(..) => Some(p_floats / TyKind::FLOATS.len() as f32),
-                TyKind::RawPtr(..) | TyKind::Ref(..) => {
-                    Some(p_pointers / num_ptrs as f32)
-                }
+                TyKind::RawPtr(..) | TyKind::Ref(..) => Some(p_pointers / num_ptrs as f32),
                 _ => None,
             };
             if let Some(rate) = p {

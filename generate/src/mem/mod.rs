@@ -236,12 +236,14 @@ struct Allocation {
 }
 
 impl Allocation {
+    #[expect(dead_code)]
     fn runs_and_sizes(&self) -> impl Iterator<Item = (RunId, Size)> + '_ {
         self.runs
             .iter_enumerated()
             .map(|(run_id, run)| (run_id, run.size()))
     }
 
+    #[expect(dead_code)]
     fn run(&self, run_and_offset: RunAndOffset) -> &Run {
         &self.runs[run_and_offset.0]
     }
@@ -322,6 +324,7 @@ impl RunPointer {
         self.run_and_offset.1
     }
 
+    #[expect(dead_code)]
     pub fn len(&self) -> Size {
         self.size
     }
