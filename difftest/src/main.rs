@@ -84,6 +84,7 @@ fn main() -> ExitCode {
     }
 
     let llvm_toolchain = settings.get_string("llvm_toolchain").ok();
+    /*
     backends.insert(
         "llvm-no-opts",
         Box::new(LLVM::new(
@@ -101,6 +102,7 @@ fn main() -> ExitCode {
             OptLevel::Unoptimised,
         )),
     );
+    */
 
     if let Ok(llubi) = settings.get_string("llubi_path") {
         backends.insert(
