@@ -152,19 +152,24 @@ pub fn run_diff_test<'a>(
     source: &Source,
     backends: HashMap<BackendName, Box<dyn Backend + 'a>>,
 ) -> ExecResults {
-    let target_dir = tempfile::tempdir().unwrap();
+    let mut target_dir = None;
+    if backends.values().any(|b| b.needs_path()) {
+        target_dir = Some(
+    tempfile::tempdir().unwrap());
+    }
     let exec_results: HashMap<BackendName, ExecResult> = backends
         .par_iter()
         .map(|(&name, b)| {
-            let target_path = target_dir.path().join(name);
+            let target_path = target_dir.as_ref().map(|dir| dir.path().join(name));
+            let target_path = target_path.as_deref();
             let result = if log_enabled!(log::Level::Debug) {
                 let time = Instant::now();
-                let result = b.execute(source, &target_path);
+                let result = b.execute(source, target_path);
                 let dur = time.elapsed();
                 debug!("{name} took {}s", dur.as_secs_f32());
                 result
             } else {
-                b.execute(source, &target_path)
+                b.execute(source, target_path)
             };
             (name, result)
         })
