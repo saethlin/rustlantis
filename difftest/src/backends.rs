@@ -353,7 +353,10 @@ impl Miri {
             debug!("Detected built Miri under {}", miri_dir.to_string_lossy());
         }
 
-        let sysroot = Self::find_sysroot(&BackendSource::Path(miri_dir.to_owned()))?;
+        let sysroot = match std::env::var("MIRI_SYSROOT") {
+            Ok(s) => PathBuf::from(s),
+            Err(_) => Self::find_sysroot(&BackendSource::Path(miri_dir.to_owned()))?,
+        };
 
         Ok(Self {
             miri: BackendSource::Path(miri_dir.join("target/release/miri")),
@@ -368,7 +371,11 @@ impl Miri {
         check_ub: bool,
         mir_opt: OptLevel,
     ) -> Result<Self, BackendInitError> {
-        let sysroot = Self::find_sysroot(&BackendSource::Rustup(toolchain.to_owned()))?;
+        let sysroot = match std::env::var("MIRI_SYSROOT") {
+            Ok(s) => PathBuf::from(s),
+            Err(_) => Self::find_sysroot(&BackendSource::Rustup(toolchain.to_owned()))?,
+        };
+
         Ok(Self {
             miri: BackendSource::Rustup(toolchain.to_owned()),
             sysroot,

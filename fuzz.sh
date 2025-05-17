@@ -2,6 +2,7 @@
 set -eu
 
 cargo build --release
+export MIRI_SYSROOT=$(cargo +nightly miri setup --print-sysroot)
 
 OUT=$(mktemp -d '/tmp/.rustlantis-XXXXXX')
 function cleanup {

@@ -57,7 +57,8 @@ fn main() -> ExitCode {
             backends.insert("miri-unchecked", Box::new(miri));
         }
     } else if let Ok(miri_toolchain) = settings.get_string("miri_toolchain") {
-        let miri = Miri::from_rustup(&miri_toolchain, check_ub, OptLevel::Unoptimised).expect("miri init failed");
+        let miri = Miri::from_rustup(&miri_toolchain, check_ub, OptLevel::Unoptimised)
+            .expect("miri init failed");
         if check_ub {
             backends.insert("miri-checked", Box::new(miri));
         } else {
@@ -66,14 +67,14 @@ fn main() -> ExitCode {
     }
 
     if let Ok(miri_toolchain) = settings.get_string("miri_toolchain") {
-        let miri = Miri::from_rustup(&miri_toolchain, check_ub, OptLevel::Optimised).expect("miri init failed");
+        let miri = Miri::from_rustup(&miri_toolchain, check_ub, OptLevel::Optimised)
+            .expect("miri init failed");
         if check_ub {
             backends.insert("miri-checked-opt", Box::new(miri));
         } else {
             backends.insert("miri-unchecked-opt", Box::new(miri));
         }
     }
-
 
     if let Ok(cg_gcc) = settings.get_string("cg_gcc_dir") {
         let cg_gcc = GCC::from_built_repo(cg_gcc, OptLevel::Optimised, OptLevel::Optimised);
