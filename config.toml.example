@@ -1,8 +1,19 @@
-# Fuzz using rustup distributed miri
-miri_toolchain = "nightly"
+[backends.miri]
+type = "miri"
+toolchain = "nightly"
+flags = ["-Zmiri-tree-borrows"]
 
-# Fuzz using rustup distributed cranelift
-cranelift_toolchain = "nightly"
+[backends.miri-opt]
+type = "miri"
+toolchain = "nightly"
+flags = ["-Zmiri-tree-borrows", "-Zmir-opt-level=4"]
 
-# Override toolchain for default rustc backend
-llvm_toolchain = "nightly"
+[backends.llvm]
+type = "llvm"
+toolchain = "nightly"
+flags = ["-Zmir-opt-level=0"]
+
+[backends.llvm-opt]
+type = "llvm"
+toolchain = "nightly"
+flags = ["-Zmir-opt-level=0", "-Copt-level=3", "-Ctarget-cpu=native"]

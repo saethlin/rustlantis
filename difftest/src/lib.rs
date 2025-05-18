@@ -3,11 +3,9 @@
 
 pub mod backends;
 
-// pub use backend;
 use std::{
     collections::{HashMap, HashSet},
     fmt::{self, Display},
-    ops::Index,
     path::PathBuf,
     time::Instant,
 };
@@ -15,8 +13,6 @@ use std::{
 use backends::{Backend, CompExecError, ExecResult};
 use colored::Colorize;
 use log::{debug, log_enabled};
-
-pub type BackendName = &'static str;
 
 pub enum Source {
     File(PathBuf),
@@ -34,15 +30,15 @@ impl Display for Source {
 
 pub struct ExecResults {
     // Equivalence classes of exec results and backends
-    results: HashMap<ExecResult, HashSet<BackendName>>,
+    results: HashMap<ExecResult, HashSet<String>>,
 }
 
 impl ExecResults {
-    pub fn from_exec_results<'a>(map: impl Iterator<Item = (BackendName, ExecResult)>) -> Self {
+    pub fn from_exec_results<'a>(map: impl Iterator<Item = (String, ExecResult)>) -> Self {
         //TODO: optimisation here to check if all results are equal directly, since most should be
 
         // Split execution results into equivalent classes
-        let mut eq_classes: HashMap<ExecResult, HashSet<BackendName>> = HashMap::new();
+        let mut eq_classes: HashMap<ExecResult, HashSet<String>> = HashMap::new();
 
         'outer: for (name, result) in map {
             for (class_result, names) in &mut eq_classes {
@@ -55,7 +51,7 @@ impl ExecResults {
                     result == *class_result
                 };
                 if eq {
-                    names.insert(name);
+                    names.insert(name.clone());
                     continue 'outer;
                 }
             }
@@ -98,10 +94,11 @@ impl ExecResults {
     }
 }
 
-impl Index<BackendName> for ExecResults {
+/*
+impl Index<String> for ExecResults {
     type Output = ExecResult;
 
-    fn index(&self, index: BackendName) -> &Self::Output {
+    fn index(&self, index: String) -> &Self::Output {
         for (result, names) in &self.results {
             if names.contains(index) {
                 return result;
@@ -110,6 +107,7 @@ impl Index<BackendName> for ExecResults {
         panic!("no result for {index}")
     }
 }
+*/
 
 impl fmt::Display for ExecResults {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -118,7 +116,7 @@ impl fmt::Display for ExecResults {
                 "{} produced the following output:\n",
                 names
                     .iter()
-                    .copied()
+                    .map(String::as_str)
                     .intersperse(", ")
                     .collect::<String>()
                     .blue()
@@ -147,7 +145,7 @@ impl fmt::Display for ExecResults {
 
 pub fn run_diff_test<'a>(
     source: &Source,
-    backends: HashMap<BackendName, Box<dyn Backend + 'a>>,
+    backends: HashMap<String, Box<dyn Backend + 'a>>,
 ) -> ExecResults {
     let mut target_dir = None;
     let mut results = Vec::new();

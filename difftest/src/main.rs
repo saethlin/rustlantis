@@ -1,6 +1,5 @@
 #![feature(iter_intersperse)]
 
-use core::panic;
 use std::{
     collections::HashMap,
     io::{self, Read},
@@ -10,12 +9,44 @@ use std::{
 };
 
 use clap::{Arg, Command};
-use config::Config;
 use difftest::{
-    backends::{Backend, Cranelift, Miri, OptLevel, GCC, LLUBI, LLVM},
-    run_diff_test, BackendName, Source,
+    backends::{Backend, Cranelift, Miri, GCC, LLUBI, LLVM},
+    run_diff_test, Source,
 };
 use log::{debug, error, info};
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+struct Config {
+    backends: HashMap<String, BackendConfig>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[serde(tag = "type")]
+enum BackendConfig {
+    Miri {
+        toolchain: String,
+        flags: Vec<String>,
+    },
+    LLVM {
+        toolchain: String,
+        flags: Vec<String>,
+    },
+    Cranelift {
+        toolchain: String,
+        flags: Vec<String>,
+    },
+    GCC {
+        repo: String,
+        flags: Vec<String>,
+    },
+    LLUBI {
+        toolchain: String,
+        llubi_path: String,
+        flags: Vec<String>,
+    },
+}
 
 fn main() -> ExitCode {
     env_logger::init();
@@ -25,96 +56,31 @@ fn main() -> ExitCode {
         .get_matches();
     let source = matches.get_one::<String>("file").expect("required");
 
-    // Initialise backends
-    // TODO: extract this out into a function
-    let settings = Config::builder()
-        .add_source(config::File::with_name("config.toml").required(false))
-        .add_source(config::Environment::default())
-        .build()
-        .unwrap();
+    let config = std::fs::read_to_string("config.toml").unwrap();
+    let v: toml::Value = toml::from_str(&config).unwrap();
+    eprintln!("{:#?}", v["backends"]);
+    let settings: Config = toml::from_str(&config).unwrap();
 
-    let mut backends: HashMap<BackendName, Box<dyn Backend>> = HashMap::default();
-    if let Ok(clif_dir) = settings.get_string("cranelift_dir") {
-        let clif = Cranelift::from_repo(clif_dir, OptLevel::Optimised, OptLevel::Unoptimised)
-            .expect("cranelift init failed");
-        backends.insert("cranelift-opt-only", Box::new(clif));
-    } else if let Ok(clif_toolchain) = settings.get_string("cranelift_toolchain") {
-        let clif =
-            Cranelift::from_rustup(&clif_toolchain, OptLevel::Optimised, OptLevel::Unoptimised)
-                .expect("cranelift init failed");
-        backends.insert("cranelift-opt-only", Box::new(clif));
-    }
-
-    let check_ub = settings
-        .get_string("miri_check_ub")
-        .map(|config| config == "true" || config == "1")
-        .unwrap_or(true);
-    if let Ok(miri_dir) = settings.get_string("miri_dir") {
-        let miri = Miri::from_repo(miri_dir, check_ub).expect("miri init failed");
-        if check_ub {
-            backends.insert("miri-checked", Box::new(miri));
-        } else {
-            backends.insert("miri-unchecked", Box::new(miri));
-        }
-    } else if let Ok(miri_toolchain) = settings.get_string("miri_toolchain") {
-        let miri = Miri::from_rustup(&miri_toolchain, check_ub, OptLevel::Unoptimised)
-            .expect("miri init failed");
-        if check_ub {
-            backends.insert("miri-checked", Box::new(miri));
-        } else {
-            backends.insert("miri-unchecked", Box::new(miri));
-        }
-    }
-
-    if let Ok(miri_toolchain) = settings.get_string("miri_toolchain") {
-        let miri = Miri::from_rustup(&miri_toolchain, check_ub, OptLevel::Optimised)
-            .expect("miri init failed");
-        if check_ub {
-            backends.insert("miri-checked-opt", Box::new(miri));
-        } else {
-            backends.insert("miri-unchecked-opt", Box::new(miri));
-        }
-    }
-
-    if let Ok(cg_gcc) = settings.get_string("cg_gcc_dir") {
-        let cg_gcc = GCC::from_built_repo(cg_gcc, OptLevel::Optimised, OptLevel::Optimised);
-        match cg_gcc {
-            Ok(cg_gcc) => backends.insert("cg_gcc", Box::new(cg_gcc)),
-            Err(e) => panic!("rustc_codegen_gcc init failed\n{}", e.0),
+    let mut backends = HashMap::new();
+    for (name, config) in settings.backends {
+        let backend: Box<dyn Backend> = match config {
+            BackendConfig::Miri { toolchain, flags } => {
+                Box::new(Miri::from_rustup(toolchain, flags).unwrap())
+            }
+            BackendConfig::LLVM { toolchain, flags } => Box::new(LLVM::new(toolchain, flags)),
+            BackendConfig::Cranelift { toolchain, flags } => {
+                Box::new(Cranelift::from_rustup(toolchain, flags))
+            }
+            BackendConfig::GCC { repo, flags } => {
+                Box::new(GCC::from_built_repo(repo, flags).unwrap())
+            }
+            BackendConfig::LLUBI {
+                toolchain,
+                llubi_path,
+                flags,
+            } => Box::new(LLUBI::new(toolchain, llubi_path, flags)),
         };
-    }
-
-    let llvm_toolchain = settings.get_string("llvm_toolchain").ok();
-    /*
-    backends.insert(
-        "llvm-no-opts",
-        Box::new(LLVM::new(
-            llvm_toolchain.clone(),
-            OptLevel::Unoptimised,
-            OptLevel::Unoptimised,
-        )),
-    );
-
-    backends.insert(
-        "llvm-opt-only",
-        Box::new(LLVM::new(
-            llvm_toolchain.clone(),
-            OptLevel::Optimised,
-            OptLevel::Unoptimised,
-        )),
-    );
-    */
-
-    if let Ok(llubi) = settings.get_string("llubi_path") {
-        backends.insert(
-            "llvm-opt-llubi",
-            Box::new(LLUBI::new(
-                llvm_toolchain,
-                llubi,
-                OptLevel::Optimised,
-                OptLevel::Optimised,
-            )),
-        );
+        backends.insert(name, backend);
     }
 
     let source = if source == "-" {
@@ -132,7 +98,7 @@ fn main() -> ExitCode {
         source,
         backends
             .keys()
-            .copied()
+            .map(String::as_str)
             .intersperse(", ")
             .collect::<String>()
     );
