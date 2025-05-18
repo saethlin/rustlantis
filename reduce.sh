@@ -2,7 +2,4 @@
 
 set -eu
 
-export REPRODUCER=$1
-export SYSROOT=$(cargo +nightly miri setup --print-sysroot)
-
-cvise ./interesting.sh $REPRODUCER --timeout 5 --not-c
+cvise ./target/release/difftest $1 --not-c --shaddap --timeout 5

@@ -11,7 +11,7 @@ trap cleanup EXIT
 
 proc=16
 for job in $(seq 0 $((proc-1))); do
-	nice -n 19 ./job.sh &> $job.out &
+    nice -n 19 ./job.sh &> $job.out &
 done
 
 wait
