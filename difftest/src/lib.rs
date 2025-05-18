@@ -74,40 +74,26 @@ impl ExecResults {
     }
 
     pub fn has_ub(&self) -> Option<bool> {
-        self.results
-            .iter()
-            .find_map(|(result, backends)| {
-                if backends.contains("miri") {
-                    Some(result)
-                } else {
-                    None
-                }
+        self.miri_result().map(|result| {
+            result.clone().is_err_and(|err| {
+                err.0
+                    .stderr
+                    .to_string_lossy()
+                    .contains("Undefined Behavior")
             })
-            .map(|result| {
-                result.clone().is_err_and(|err| {
-                    err.0
-                        .stderr
-                        .to_string_lossy()
-                        .contains("Undefined Behavior")
-                })
-            })
+        })
     }
-}
 
-/*
-impl Index<String> for ExecResults {
-    type Output = ExecResult;
-
-    fn index(&self, index: String) -> &Self::Output {
-        for (result, names) in &self.results {
-            if names.contains(index) {
-                return result;
+    pub fn miri_result(&self) -> Option<&ExecResult> {
+        self.results.iter().find_map(|(result, backends)| {
+            if backends.contains("miri") {
+                Some(result)
+            } else {
+                None
             }
-        }
-        panic!("no result for {index}")
+        })
     }
 }
-*/
 
 impl fmt::Display for ExecResults {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

@@ -21,9 +21,14 @@ fn main() -> ExitCode {
 
     let matches = Command::new("difftest")
         .arg(Arg::new("file").required(true))
-        .arg(Arg::new("reduce").long("reduce"))
+        .arg(
+            Arg::new("reduce")
+                .long("reduce")
+                .action(clap::ArgAction::SetTrue),
+        )
         .get_matches();
     let source = matches.get_one::<String>("file").expect("required");
+    let reduce = matches.get_flag("reduce");
 
     let config = config::load();
 
@@ -49,6 +54,8 @@ fn main() -> ExitCode {
         backends.insert(name, backend);
     }
 
+    // FIXME: Read the source from disk here, so that no matter how many backends we run we always
+    // read the code only once.
     let source = if source == "-" {
         let mut code = String::new();
         io::stdin()
@@ -70,13 +77,30 @@ fn main() -> ExitCode {
     );
 
     let results = run_diff_test(&source, backends);
-    if results.all_same() && results.all_success() {
-        info!("{} is all the same", source);
-        debug!("{}", results);
-        ExitCode::SUCCESS
+    if reduce {
+        // The miri run must be good.
+        let miri_result = results.miri_result().unwrap();
+        if miri_result.is_err() {
+            info!("Miri did not pass, so this input must not be interesting");
+            return ExitCode::FAILURE;
+        }
+        // And we need something different.
+        if results.all_same() {
+            info!("All backends behaved the same, so this input must not be interesting");
+            ExitCode::FAILURE
+        } else {
+            info!("Miri passed but another backend behaved differently");
+            ExitCode::SUCCESS
+        }
     } else {
-        let results = results.to_string();
-        error!("{} didn't pass:\n{results}", source,);
-        ExitCode::FAILURE
+        if results.all_same() && results.all_success() {
+            info!("{} is all the same", source);
+            debug!("{}", results);
+            ExitCode::SUCCESS
+        } else {
+            let results = results.to_string();
+            error!("{} didn't pass:\n{results}", source,);
+            ExitCode::FAILURE
+        }
     }
 }
