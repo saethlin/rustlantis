@@ -1,3 +1,6 @@
+max_fn_count = 0
+max_args_count = 0
+
 [backends.miri]
 type = "miri"
 toolchain = "nightly"
@@ -8,12 +11,12 @@ type = "miri"
 toolchain = "nightly"
 flags = ["-Zmiri-tree-borrows", "-Zmir-opt-level=4"]
 
-[backends.llvm]
-type = "llvm"
-toolchain = "nightly"
-flags = ["-Zmir-opt-level=0"]
+#[backends.llvm]
+#type = "llvm"
+#toolchain = "nightly"
+#flags = ["-Zmir-opt-level=0"]
 
-[backends.llvm-opt]
-type = "llvm"
-toolchain = "nightly"
-flags = ["-Zmir-opt-level=0", "-Copt-level=3", "-Ctarget-cpu=native"]
+#[backends.llvm-opt]
+#type = "llvm"
+#toolchain = "nightly"
+#flags = ["-Zmir-opt-level=0", "-Copt-level=3", "-Ctarget-cpu=native"]
