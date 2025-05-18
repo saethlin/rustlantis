@@ -9,58 +9,26 @@ use std::{
 };
 
 use clap::{Arg, Command};
+use config::BackendConfig;
 use difftest::{
     backends::{Backend, Cranelift, Miri, GCC, LLUBI, LLVM},
     run_diff_test, Source,
 };
 use log::{debug, error, info};
-use serde::Deserialize;
-
-#[derive(Deserialize)]
-struct Config {
-    backends: HashMap<String, BackendConfig>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "lowercase")]
-#[serde(tag = "type")]
-enum BackendConfig {
-    Miri {
-        toolchain: String,
-        flags: Vec<String>,
-    },
-    LLVM {
-        toolchain: String,
-        flags: Vec<String>,
-    },
-    Cranelift {
-        toolchain: String,
-        flags: Vec<String>,
-    },
-    GCC {
-        repo: String,
-        flags: Vec<String>,
-    },
-    LLUBI {
-        toolchain: String,
-        llubi_path: String,
-        flags: Vec<String>,
-    },
-}
 
 fn main() -> ExitCode {
     env_logger::init();
 
     let matches = Command::new("difftest")
         .arg(Arg::new("file").required(true))
+        .arg(Arg::new("reduce").long("reduce"))
         .get_matches();
     let source = matches.get_one::<String>("file").expect("required");
 
-    let config = std::fs::read_to_string("config.toml").unwrap();
-    let settings: Config = toml::from_str(&config).unwrap();
+    let config = config::load();
 
     let mut backends = HashMap::new();
-    for (name, config) in settings.backends {
+    for (name, config) in config.backends {
         let backend: Box<dyn Backend> = match config {
             BackendConfig::Miri { toolchain, flags } => {
                 Box::new(Miri::from_rustup(toolchain, flags).unwrap())

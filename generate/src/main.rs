@@ -38,9 +38,12 @@ fn main() {
         .get_one::<u64>("seed")
         .expect("need an integer as seed");
     let debug_dump = matches.get_one::<bool>("debug").copied().unwrap_or(false);
+
+    let config = config::load();
+
     info!("Generating a program with seed {seed}");
     let call_syntax = matches.get_one::<String>("call-syntax").unwrap();
-    let genctxt = GenerationCtx::new(seed, debug_dump);
+    let genctxt = GenerationCtx::new(config.generation, seed, debug_dump);
     let time = Instant::now();
     let (program, tcx) = genctxt.generate();
     println!("{}", program.serialize(&tcx, call_syntax.as_str().into()));

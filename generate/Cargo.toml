@@ -9,6 +9,7 @@ edition = "2021"
 mir = { path = "../mir" }
 abi = { path = "../abi" }
 rangemap = { path = "../rangemap" }
+config = { path = "../config" }
 petgraph = "0.6.3"
 rand = { version = "0.8.5", features = ["small_rng"] }
 log = "0.4.17"

@@ -10,6 +10,5 @@ do
     then
         mkdir -p out
         printf "%s" "$code" > out/$seed.rs
-        ./reduce.sh out/$seed.rs
     fi
 done

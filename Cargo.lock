@@ -139,6 +139,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "config"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "toml",
+]
+
+[[package]]
 name = "crossbeam-deque"
 version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -169,6 +177,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "colored",
+ "config",
  "env_logger",
  "log",
  "rayon",
@@ -241,6 +250,7 @@ dependencies = [
  "abi",
  "bimap",
  "clap",
+ "config",
  "env_logger",
  "index_vec",
  "log",
