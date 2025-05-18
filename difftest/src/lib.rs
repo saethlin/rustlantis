@@ -143,7 +143,7 @@ impl fmt::Display for ExecResults {
 }
 
 pub fn run_diff_test<'a>(
-    source: &Source,
+    source: &str,
     backends: HashMap<String, Box<dyn Backend + 'a>>,
 ) -> ExecResults {
     let mut target_dir = None;

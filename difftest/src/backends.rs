@@ -11,7 +11,6 @@ use tempfile::TempDir;
 
 use log::debug;
 
-use crate::Source;
 use config::BackendConfig;
 use config::Config;
 
@@ -105,11 +104,11 @@ pub type ExecResult = Result<ProcessOutput, CompExecError>;
 pub struct BackendInitError(pub String);
 
 pub trait Backend: Send + Sync {
-    fn compile(&self, _: &Source, _: &mut Option<TempDir>) -> ProcessOutput {
+    fn compile(&self, _: &str, _: &mut Option<TempDir>) -> ProcessOutput {
         panic!("not implemented")
     }
 
-    fn execute(&self, source: &Source, target: &mut Option<TempDir>) -> ExecResult {
+    fn execute(&self, source: &str, target: &mut Option<TempDir>) -> ExecResult {
         debug!("Compiling {source}");
         let compile_out = self.compile(source, target);
         if !compile_out.status.success() {
@@ -136,32 +135,20 @@ fn make_tempfile(target: &mut Option<TempDir>) -> PathBuf {
         .join("test")
 }
 
-fn run_compile_command(mut command: Command, source: &Source) -> process::Output {
-    let compiler = match source {
-        Source::File(path) => {
-            command.arg(path.canonicalize().expect("path is correct"));
-            command
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-                .expect("can spawn compiler")
-        }
-        Source::Stdin(code) => {
-            command.arg("-").stdin(Stdio::piped());
-            let mut child = command
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-                .expect("can spawn compiler");
-            child
-                .stdin
-                .as_mut()
-                .unwrap()
-                .write_all(code.as_bytes())
-                .unwrap();
-            child
-        }
-    };
+fn run_compile_command(mut command: Command, source: &str) -> process::Output {
+    command.arg("-").stdin(Stdio::piped());
+    let mut child = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("can spawn compiler");
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(source.as_bytes())
+        .unwrap();
+    let compiler = child;
 
     let compile_out = compiler
         .wait_with_output()
@@ -182,7 +169,7 @@ impl LLVM {
 }
 
 impl Backend for LLVM {
-    fn compile(&self, source: &Source, target: &mut Option<TempDir>) -> ProcessOutput {
+    fn compile(&self, source: &str, target: &mut Option<TempDir>) -> ProcessOutput {
         let target = make_tempfile(target);
         let mut command = Command::new("rustc");
 
@@ -215,7 +202,7 @@ impl LLUBI {
 }
 
 impl Backend for LLUBI {
-    fn compile(&self, source: &Source, target: &mut Option<TempDir>) -> ProcessOutput {
+    fn compile(&self, source: &str, target: &mut Option<TempDir>) -> ProcessOutput {
         let target = make_tempfile(target);
 
         let mut command = Command::new("rustc");
@@ -230,7 +217,7 @@ impl Backend for LLUBI {
         run_compile_command(command, source).into()
     }
 
-    fn execute(&self, source: &Source, target: &mut Option<TempDir>) -> ExecResult {
+    fn execute(&self, source: &str, target: &mut Option<TempDir>) -> ExecResult {
         debug!("Compiling {source}");
         let compile_out = self.compile(source, target);
         if !compile_out.status.success() {
@@ -375,7 +362,7 @@ impl Miri {
 }
 
 impl Backend for Miri {
-    fn execute(&self, source: &Source, _: &mut Option<TempDir>) -> ExecResult {
+    fn execute(&self, source: &str, _: &mut Option<TempDir>) -> ExecResult {
         debug!("Executing with Miri {source}");
         let mut command = match &self.miri {
             BackendSource::Path(binary) => Command::new(binary),
@@ -465,7 +452,7 @@ impl Cranelift {
 }
 
 impl Backend for Cranelift {
-    fn compile(&self, source: &Source, target: &mut Option<TempDir>) -> ProcessOutput {
+    fn compile(&self, source: &str, target: &mut Option<TempDir>) -> ProcessOutput {
         let target = make_tempfile(target);
         let mut command = match &self.clif {
             BackendSource::Path(binary) => Command::new(binary),
@@ -523,7 +510,7 @@ impl GCC {
 }
 
 impl Backend for GCC {
-    fn compile(&self, source: &Source, target: &mut Option<TempDir>) -> ProcessOutput {
+    fn compile(&self, source: &str, target: &mut Option<TempDir>) -> ProcessOutput {
         let target = make_tempfile(target);
         let mut command = Command::new("rustc");
         command

@@ -2,13 +2,11 @@
 
 use std::{
     io::{self, Read},
-    path::PathBuf,
     process::ExitCode,
-    str::FromStr,
 };
 
 use clap::{Arg, Command};
-use difftest::{backends, run_diff_test, Source};
+use difftest::{backends, run_diff_test};
 use log::{debug, error, info};
 
 fn main() -> ExitCode {
@@ -28,16 +26,14 @@ fn main() -> ExitCode {
     let config = config::load("config.toml");
     let backends = backends::from_config(config);
 
-    // FIXME: Read the source from disk here, so that no matter how many backends we run we always
-    // read the code only once.
-    let source = if source == "-" {
+    let code = if source == "-" {
         let mut code = String::new();
         io::stdin()
             .read_to_string(&mut code)
             .expect("can read source code from stdin");
-        Source::Stdin(code)
+        code
     } else {
-        Source::File(PathBuf::from_str(source).expect("is valid path"))
+        std::fs::read_to_string(&source).expect("is valid path")
     };
 
     info!(
@@ -50,7 +46,7 @@ fn main() -> ExitCode {
             .collect::<String>()
     );
 
-    let results = run_diff_test(&source, backends);
+    let results = run_diff_test(&code, backends);
     if reduce {
         // The miri run must be good.
         let miri_result = results.miri_result().unwrap();
@@ -73,7 +69,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         } else {
             let results = results.to_string();
-            error!("{} didn't pass:\n{results}", source,);
+            error!("{} didn't pass:\n{results}", source);
             ExitCode::FAILURE
         }
     }

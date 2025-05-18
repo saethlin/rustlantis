@@ -1,6 +1,4 @@
-use std::{path::PathBuf, str::FromStr};
-
-use difftest::{backends, run_diff_test, Source};
+use difftest::{backends, run_diff_test};
 
 #[test]
 fn correct_mir() {
@@ -8,7 +6,7 @@ fn correct_mir() {
     let backends = backends::from_config(config);
 
     let results = run_diff_test(
-        &Source::File(PathBuf::from_str("tests/inputs/simple.rs").unwrap()),
+        &std::fs::read_to_string("tests/inputs/simple.rs").unwrap(),
         backends,
     );
     println!("{}", results);
@@ -24,7 +22,7 @@ fn invalid_mir() {
     let backends = backends::from_config(config);
 
     let results = run_diff_test(
-        &Source::File(PathBuf::from_str("tests/inputs/invalid_mir.rs").unwrap()),
+        &std::fs::read_to_string("tests/inputs/invalid_mir.rs").unwrap(),
         backends,
     );
     println!("{}", results);
@@ -39,7 +37,7 @@ fn ub() {
     let backends = backends::from_config(config);
 
     let results = run_diff_test(
-        &Source::File(PathBuf::from_str("tests/inputs/ub.rs").unwrap()),
+        &std::fs::read_to_string("tests/inputs/ub.rs").unwrap(),
         backends,
     );
     println!("{}", results);
