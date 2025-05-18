@@ -1,8 +1,9 @@
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::path::Path;
 
-pub fn load() -> Config {
-    let config = std::fs::read_to_string("config.toml").unwrap();
+pub fn load(path: impl AsRef<Path>) -> Config {
+    let config = std::fs::read_to_string(path).unwrap();
     toml::from_str(&config).unwrap()
 }
 

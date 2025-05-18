@@ -89,12 +89,23 @@ pub trait Backend: Send + Sync {
         }
 
         debug!("Executing compiled {source}");
-        let target = target.get_or_insert_with(|| tempfile::tempdir().unwrap());
-        let exec_out = Command::new(target.path())
+        let target = make_tempfile(target);
+        let exec_out = Command::new(&target)
             .output()
             .expect("can execute target program and get output");
         Ok(exec_out.into())
     }
+}
+
+// Some backends need a place to write a file.
+// The sensible location for this is a tempdir, but to avoid creating a lot of those, we pass
+// around a &mut Option<TempDir> which caches a shared tempdir so that we can have one per
+// invocation, and only if one of the backends in the invocation needs it.
+fn make_tempfile(target: &mut Option<TempDir>) -> PathBuf {
+    target
+        .get_or_insert_with(|| tempfile::tempdir().unwrap())
+        .path()
+        .join("test")
 }
 
 fn run_compile_command(mut command: Command, source: &Source) -> process::Output {
@@ -144,10 +155,7 @@ impl LLVM {
 
 impl Backend for LLVM {
     fn compile(&self, source: &Source, target: &mut Option<TempDir>) -> ProcessOutput {
-        let target = target
-            .get_or_insert_with(|| tempfile::tempdir().unwrap())
-            .path();
-
+        let target = make_tempfile(target);
         let mut command = Command::new("rustc");
 
         command
@@ -180,9 +188,7 @@ impl LLUBI {
 
 impl Backend for LLUBI {
     fn compile(&self, source: &Source, target: &mut Option<TempDir>) -> ProcessOutput {
-        let target = target
-            .get_or_insert_with(|| tempfile::tempdir().unwrap())
-            .path();
+        let target = make_tempfile(target);
 
         let mut command = Command::new("rustc");
 
@@ -204,9 +210,7 @@ impl Backend for LLUBI {
         }
 
         debug!("Executing compiled {source}");
-        let target = target
-            .get_or_insert_with(|| tempfile::tempdir().unwrap())
-            .path();
+        let target = make_tempfile(target);
         let exec_out = Command::new(self.llubi_path.clone())
             .arg(target)
             .arg("--rust")
@@ -434,9 +438,7 @@ impl Cranelift {
 
 impl Backend for Cranelift {
     fn compile(&self, source: &Source, target: &mut Option<TempDir>) -> ProcessOutput {
-        let target = target
-            .get_or_insert_with(|| tempfile::tempdir().unwrap())
-            .path();
+        let target = make_tempfile(target);
         let mut command = match &self.clif {
             BackendSource::Path(binary) => Command::new(binary),
             BackendSource::Rustup(toolchain) => {
@@ -493,9 +495,7 @@ impl GCC {
 }
 impl Backend for GCC {
     fn compile(&self, source: &Source, target: &mut Option<TempDir>) -> ProcessOutput {
-        let target = target
-            .get_or_insert_with(|| tempfile::tempdir().unwrap())
-            .path();
+        let target = make_tempfile(target);
         let mut command = Command::new("rustc");
         command
             .clear_env(&["PATH", "DEVELOPER_DIR", "LD_LIBRARY_PATH"])

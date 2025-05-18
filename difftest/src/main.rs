@@ -1,7 +1,6 @@
 #![feature(iter_intersperse)]
 
 use std::{
-    collections::HashMap,
     io::{self, Read},
     path::PathBuf,
     process::ExitCode,
@@ -9,11 +8,7 @@ use std::{
 };
 
 use clap::{Arg, Command};
-use config::BackendConfig;
-use difftest::{
-    backends::{Backend, Cranelift, Miri, GCC, LLUBI, LLVM},
-    run_diff_test, Source,
-};
+use difftest::{initialize_backends, run_diff_test, Source};
 use log::{debug, error, info};
 
 fn main() -> ExitCode {
@@ -30,29 +25,8 @@ fn main() -> ExitCode {
     let source = matches.get_one::<String>("file").expect("required");
     let reduce = matches.get_flag("reduce");
 
-    let config = config::load();
-
-    let mut backends = HashMap::new();
-    for (name, config) in config.backends {
-        let backend: Box<dyn Backend> = match config {
-            BackendConfig::Miri { toolchain, flags } => {
-                Box::new(Miri::from_rustup(toolchain, flags).unwrap())
-            }
-            BackendConfig::LLVM { toolchain, flags } => Box::new(LLVM::new(toolchain, flags)),
-            BackendConfig::Cranelift { toolchain, flags } => {
-                Box::new(Cranelift::from_rustup(toolchain, flags))
-            }
-            BackendConfig::GCC { repo, flags } => {
-                Box::new(GCC::from_built_repo(repo, flags).unwrap())
-            }
-            BackendConfig::LLUBI {
-                toolchain,
-                llubi_path,
-                flags,
-            } => Box::new(LLUBI::new(toolchain, llubi_path, flags)),
-        };
-        backends.insert(name, backend);
-    }
+    let config = config::load("config.toml");
+    let backends = initialize_backends(config);
 
     // FIXME: Read the source from disk here, so that no matter how many backends we run we always
     // read the code only once.

@@ -10,9 +10,35 @@ use std::{
     time::Instant,
 };
 
-use backends::{Backend, CompExecError, ExecResult};
+use backends::{Backend, CompExecError, Cranelift, ExecResult, Miri, GCC, LLUBI, LLVM};
 use colored::Colorize;
+use config::{BackendConfig, Config};
 use log::{debug, log_enabled};
+
+pub fn initialize_backends(config: Config) -> HashMap<String, Box<dyn Backend>> {
+    let mut backends = HashMap::new();
+    for (name, config) in config.backends {
+        let backend: Box<dyn Backend> = match config {
+            BackendConfig::Miri { toolchain, flags } => {
+                Box::new(Miri::from_rustup(toolchain, flags).unwrap())
+            }
+            BackendConfig::LLVM { toolchain, flags } => Box::new(LLVM::new(toolchain, flags)),
+            BackendConfig::Cranelift { toolchain, flags } => {
+                Box::new(Cranelift::from_rustup(toolchain, flags))
+            }
+            BackendConfig::GCC { repo, flags } => {
+                Box::new(GCC::from_built_repo(repo, flags).unwrap())
+            }
+            BackendConfig::LLUBI {
+                toolchain,
+                llubi_path,
+                flags,
+            } => Box::new(LLUBI::new(toolchain, llubi_path, flags)),
+        };
+        backends.insert(name, backend);
+    }
+    backends
+}
 
 pub enum Source {
     File(PathBuf),
@@ -92,6 +118,19 @@ impl ExecResults {
                 None
             }
         })
+    }
+}
+
+impl std::ops::Index<&str> for ExecResults {
+    type Output = ExecResult;
+
+    fn index(&self, index: &str) -> &Self::Output {
+        for (result, names) in &self.results {
+            if names.contains(index) {
+                return result;
+            }
+        }
+        panic!("no result for {index}")
     }
 }
 
