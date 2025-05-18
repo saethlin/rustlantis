@@ -15,7 +15,6 @@ use std::{
 use backends::{Backend, CompExecError, ExecResult};
 use colored::Colorize;
 use log::{debug, log_enabled};
-use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 
 pub type BackendName = &'static str;
 
@@ -39,23 +38,21 @@ pub struct ExecResults {
 }
 
 impl ExecResults {
-    pub fn from_exec_results<'a>(
-        map: impl Iterator<Item = (&'a BackendName, &'a ExecResult)>,
-    ) -> Self {
+    pub fn from_exec_results<'a>(map: impl Iterator<Item = (BackendName, ExecResult)>) -> Self {
         //TODO: optimisation here to check if all results are equal directly, since most should be
 
         // Split execution results into equivalent classes
         let mut eq_classes: HashMap<ExecResult, HashSet<BackendName>> = HashMap::new();
 
-        'outer: for (&name, result) in map {
+        'outer: for (name, result) in map {
             for (class_result, names) in &mut eq_classes {
                 // Put into an existing equivalence class
                 let eq = if let Ok(class_out) = class_result
-                    && let Ok(out) = result
+                    && let Ok(out) = &result
                 {
                     class_out.stdout == out.stdout
                 } else {
-                    result == class_result
+                    result == *class_result
                 };
                 if eq {
                     names.insert(name);
@@ -153,27 +150,19 @@ pub fn run_diff_test<'a>(
     backends: HashMap<BackendName, Box<dyn Backend + 'a>>,
 ) -> ExecResults {
     let mut target_dir = None;
-    if backends.values().any(|b| b.needs_path()) {
-        target_dir = Some(
-    tempfile::tempdir().unwrap());
+    let mut results = Vec::new();
+    for (name, backend) in backends {
+        let result = if log_enabled!(log::Level::Debug) {
+            let time = Instant::now();
+            let result = backend.execute(source, &mut target_dir);
+            let dur = time.elapsed();
+            debug!("{name} took {}s", dur.as_secs_f32());
+            result
+        } else {
+            backend.execute(source, &mut target_dir)
+        };
+        results.push((name, result));
     }
-    let exec_results: HashMap<BackendName, ExecResult> = backends
-        .par_iter()
-        .map(|(&name, b)| {
-            let target_path = target_dir.as_ref().map(|dir| dir.path().join(name));
-            let target_path = target_path.as_deref();
-            let result = if log_enabled!(log::Level::Debug) {
-                let time = Instant::now();
-                let result = b.execute(source, target_path);
-                let dur = time.elapsed();
-                debug!("{name} took {}s", dur.as_secs_f32());
-                result
-            } else {
-                b.execute(source, target_path)
-            };
-            (name, result)
-        })
-        .collect();
 
-    ExecResults::from_exec_results(exec_results.iter())
+    ExecResults::from_exec_results(results.into_iter())
 }

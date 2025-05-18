@@ -6,6 +6,7 @@ use std::{
     path::{Path, PathBuf},
     process::{self, Command, ExitStatus, Stdio},
 };
+use tempfile::TempDir;
 
 use log::debug;
 
@@ -76,13 +77,11 @@ pub type ExecResult = Result<ProcessOutput, CompExecError>;
 pub struct BackendInitError(pub String);
 
 pub trait Backend: Send + Sync {
-    fn needs_path(&self) -> bool;
-
-    fn compile(&self, _: &Source, _: Option<&Path>) -> ProcessOutput {
+    fn compile(&self, _: &Source, _: &mut Option<TempDir>) -> ProcessOutput {
         panic!("not implemented")
     }
 
-    fn execute(&self, source: &Source, target: Option<&Path>) -> ExecResult {
+    fn execute(&self, source: &Source, target: &mut Option<TempDir>) -> ExecResult {
         debug!("Compiling {source}");
         let compile_out = self.compile(source, target);
         if !compile_out.status.success() {
@@ -90,8 +89,8 @@ pub trait Backend: Send + Sync {
         }
 
         debug!("Executing compiled {source}");
-        let target = target.unwrap();
-        let exec_out = Command::new(target)
+        let target = target.get_or_insert_with(|| tempfile::tempdir().unwrap());
+        let exec_out = Command::new(target.path())
             .output()
             .expect("can execute target program and get output");
         Ok(exec_out.into())
@@ -171,12 +170,11 @@ impl LLVM {
 }
 
 impl Backend for LLVM {
-    fn needs_path(&self) -> bool {
-        true
-    }
+    fn compile(&self, source: &Source, target: &mut Option<TempDir>) -> ProcessOutput {
+        let target = target
+            .get_or_insert_with(|| tempfile::tempdir().unwrap())
+            .path();
 
-    fn compile(&self, source: &Source, target: Option<&Path>) -> ProcessOutput {
-        let target = target.unwrap();
         let mut command = Command::new("rustc");
         if let Some(toolchain) = &self.toolchain {
             command.arg(format!("+{}", toolchain));
@@ -222,12 +220,10 @@ impl LLUBI {
 }
 
 impl Backend for LLUBI {
-    fn needs_path(&self) -> bool {
-        true
-    }
-
-    fn compile(&self, source: &Source, target: Option<&Path>) -> ProcessOutput {
-        let target = target.unwrap();
+    fn compile(&self, source: &Source, target: &mut Option<TempDir>) -> ProcessOutput {
+        let target = target
+            .get_or_insert_with(|| tempfile::tempdir().unwrap())
+            .path();
         let mut command = Command::new("rustc");
         if let Some(toolchain) = &self.toolchain {
             command.arg(format!("+{}", toolchain));
@@ -248,7 +244,7 @@ impl Backend for LLUBI {
         run_compile_command(command, source).into()
     }
 
-    fn execute(&self, source: &Source, target: Option<&Path>) -> ExecResult {
+    fn execute(&self, source: &Source, target: &mut Option<TempDir>) -> ExecResult {
         debug!("Compiling {source}");
         let compile_out = self.compile(source, target);
         if !compile_out.status.success() {
@@ -256,7 +252,9 @@ impl Backend for LLUBI {
         }
 
         debug!("Executing compiled {source}");
-        let target = target.unwrap();
+        let target = target
+            .get_or_insert_with(|| tempfile::tempdir().unwrap())
+            .path();
         let exec_out = Command::new(self.llubi_path.clone())
             .arg(target)
             .arg("--rust")
@@ -400,11 +398,7 @@ impl Miri {
 }
 
 impl Backend for Miri {
-    fn needs_path(&self) -> bool {
-        false
-    }
-
-    fn execute(&self, source: &Source, _: Option<&Path>) -> ExecResult {
+    fn execute(&self, source: &Source, _: &mut Option<TempDir>) -> ExecResult {
         debug!("Executing with Miri {source}");
         let mut command = match &self.miri {
             BackendSource::Path(binary) => Command::new(binary),
@@ -515,12 +509,10 @@ impl Cranelift {
 }
 
 impl Backend for Cranelift {
-    fn needs_path(&self) -> bool {
-        true
-    }
-
-    fn compile(&self, source: &Source, target: Option<&Path>) -> ProcessOutput {
-        let target = target.unwrap();
+    fn compile(&self, source: &Source, target: &mut Option<TempDir>) -> ProcessOutput {
+        let target = target
+            .get_or_insert_with(|| tempfile::tempdir().unwrap())
+            .path();
         let mut command = match &self.clif {
             BackendSource::Path(binary) => Command::new(binary),
             BackendSource::Rustup(toolchain) => {
@@ -586,12 +578,10 @@ impl GCC {
     }
 }
 impl Backend for GCC {
-    fn needs_path(&self) -> bool {
-        true
-    }
-
-    fn compile(&self, source: &Source, target: Option<&Path>) -> ProcessOutput {
-        let target = target.unwrap();
+    fn compile(&self, source: &Source, target: &mut Option<TempDir>) -> ProcessOutput {
+        let target = target
+            .get_or_insert_with(|| tempfile::tempdir().unwrap())
+            .path();
         let mut command = Command::new("rustc");
         command
             .clear_env(&["PATH", "DEVELOPER_DIR", "LD_LIBRARY_PATH"])
