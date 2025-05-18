@@ -57,8 +57,6 @@ fn main() -> ExitCode {
     let source = matches.get_one::<String>("file").expect("required");
 
     let config = std::fs::read_to_string("config.toml").unwrap();
-    let v: toml::Value = toml::from_str(&config).unwrap();
-    eprintln!("{:#?}", v["backends"]);
     let settings: Config = toml::from_str(&config).unwrap();
 
     let mut backends = HashMap::new();
