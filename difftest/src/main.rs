@@ -8,7 +8,7 @@ use std::{
 };
 
 use clap::{Arg, Command};
-use difftest::{initialize_backends, run_diff_test, Source};
+use difftest::{backends, run_diff_test, Source};
 use log::{debug, error, info};
 
 fn main() -> ExitCode {
@@ -26,7 +26,7 @@ fn main() -> ExitCode {
     let reduce = matches.get_flag("reduce");
 
     let config = config::load("config.toml");
-    let backends = initialize_backends(config);
+    let backends = backends::from_config(config);
 
     // FIXME: Read the source from disk here, so that no matter how many backends we run we always
     // read the code only once.

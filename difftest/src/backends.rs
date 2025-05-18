@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     env,
     ffi::{OsStr, OsString},
     hash::{Hash, Hasher},
@@ -11,6 +12,8 @@ use tempfile::TempDir;
 use log::debug;
 
 use crate::Source;
+use config::BackendConfig;
+use config::Config;
 
 trait ClearEnv {
     fn clear_env(&mut self, preserve: &[&str]) -> &mut Command;
@@ -66,6 +69,31 @@ impl From<process::Output> for ProcessOutput {
             stderr,
         }
     }
+}
+
+pub fn from_config(config: Config) -> HashMap<String, Box<dyn Backend>> {
+    let mut backends = HashMap::new();
+    for (name, config) in config.backends {
+        let backend: Box<dyn Backend> = match config {
+            BackendConfig::Miri { toolchain, flags } => {
+                Box::new(Miri::from_rustup(toolchain, flags).unwrap())
+            }
+            BackendConfig::LLVM { toolchain, flags } => Box::new(LLVM::new(toolchain, flags)),
+            BackendConfig::Cranelift { toolchain, flags } => {
+                Box::new(Cranelift::from_rustup(toolchain, flags))
+            }
+            BackendConfig::GCC { repo, flags } => {
+                Box::new(GCC::from_built_repo(repo, flags).unwrap())
+            }
+            BackendConfig::LLUBI {
+                toolchain,
+                llubi_path,
+                flags,
+            } => Box::new(LLUBI::new(toolchain, llubi_path, flags)),
+        };
+        backends.insert(name, backend);
+    }
+    backends
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
@@ -493,6 +521,7 @@ impl GCC {
         })
     }
 }
+
 impl Backend for GCC {
     fn compile(&self, source: &Source, target: &mut Option<TempDir>) -> ProcessOutput {
         let target = make_tempfile(target);

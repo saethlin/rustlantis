@@ -1,10 +1,6 @@
-#![feature(exact_size_is_empty)]
-#![feature(iter_advance_by)]
-#![feature(variant_count)]
 #![feature(test)]
 #![feature(let_chains)]
 #![feature(try_blocks)]
-#![feature(box_patterns)]
 
 mod generation;
 mod literal;
@@ -39,7 +35,7 @@ fn main() {
         .expect("need an integer as seed");
     let debug_dump = matches.get_one::<bool>("debug").copied().unwrap_or(false);
 
-    let config = config::load();
+    let config = config::load("config.toml");
 
     info!("Generating a program with seed {seed}");
     let call_syntax = matches.get_one::<String>("call-syntax").unwrap();
