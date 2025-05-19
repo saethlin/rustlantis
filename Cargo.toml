@@ -10,3 +10,7 @@ members = [
     "abi",
     "config",
 ]
+
+[profile.release]
+debug = "line-tables-only"
+lto = "thin"
