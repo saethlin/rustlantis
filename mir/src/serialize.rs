@@ -369,11 +369,7 @@ impl Body {
 impl Program {
     pub fn serialize(&self, tcx: &TyCtxt, call_syntax: CallSynatx) -> String {
         let mut program = Program::HEADER.to_string();
-        if self.use_debug_dumper {
-            program += Program::DEBUG_DUMPER;
-        } else {
-            program += Program::DUMPER;
-        }
+
         program.extend(self.functions.iter_enumerated().map(|(idx, body)| {
             let args_list: String = body
                 .args_iter()
@@ -412,20 +408,9 @@ impl Program {
             .expect("program has functions")
             .identifier();
 
-        let hash_printer = if self.use_debug_dumper {
-            ""
-        } else {
-            r#"
-                unsafe {
-                    println!("hash: {}", H.finish());
-                }
-            "#
-        };
-
         program.push_str(&format!(
             "pub fn main() {{
                 {first_fn}({arg_list});
-                {hash_printer}
             }}"
         ));
         program

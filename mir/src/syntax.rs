@@ -716,54 +716,35 @@ impl From<f64> for Literal {
 
 impl Program {
     pub const FUNCTION_ATTRIBUTE: &'static str =
-        "#[custom_mir(dialect = \"runtime\", phase = \"initial\")]";
-    pub const HEADER: &'static str = "#![recursion_limit = \"1024\"]
-    #![feature(custom_mir, core_intrinsics, lazy_get)]
-    #![allow(unused_parens, unused_assignments, overflowing_literals, internal_features, static_mut_refs)]
-    extern crate core;
-    use core::intrinsics::mir::*;\n";
-
-    pub const DUMPER: &'static str = r#"
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    use std::sync::LazyLock;
-
-    static mut H: LazyLock<DefaultHasher> = LazyLock::new(|| DefaultHasher::new());
-
-    #[inline(never)]
-    fn dump_var(
-        val0: impl Hash,
-        val1: impl Hash,
-        val2: impl Hash,
-        val3: impl Hash,
-    ) {
-        unsafe {
-            val0.hash(LazyLock::force_mut(&mut H));
-            val1.hash(LazyLock::force_mut(&mut H));
-            val2.hash(LazyLock::force_mut(&mut H));
-            val3.hash(LazyLock::force_mut(&mut H));
+        r#"#[custom_mir(dialect = "runtime", phase = "initial")]"#;
+    pub const HEADER: &'static str = r#"#![recursion_limit = "1024"]
+#![feature(custom_mir, core_intrinsics)]
+#![allow(unused_parens, unused_assignments, overflowing_literals)]
+extern crate core;
+use core::intrinsics::mir::*;
+struct Stdout;
+impl core::fmt::Write for Stdout {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        extern "C" {
+            fn write(fd: i32, buf: *const u8, count: usize) -> isize;
+        }
+        let res = unsafe {
+            write(1, s.as_ptr(), s.len())
+        };
+        match res {
+            -1 => Err(core::fmt::Error),
+            _ => Ok(()),
         }
     }
-    "#;
-
-    pub const DEBUG_DUMPER: &'static str = r#"
-    use std::fmt::Debug;
-
-    #[inline(never)]
-    fn dump_var(
-        f: usize,
-        var0: usize, val0: impl Debug,
-        var1: usize, val1: impl Debug,
-        var2: usize, val2: impl Debug,
-        var3: usize, val3: impl Debug,
-    ) {
-        println!("fn{f}:_{var0} = {val0:?}\n_{var1} = {val1:?}\n_{var2} = {val2:?}\n_{var3} = {val3:?}");
-    }
-    "#;
+}
+#[inline(never)]
+fn dump_var(f: usize, var: usize, val: impl core::fmt::Debug) {
+    core::fmt::write(&mut Stdout, format_args!("fn{f}:_{var} = {val:?}\n")).unwrap()
+}
+"#;
 
     // Fake "intrinsic"
     pub const DUMPER_CALL: Callee = Callee::Named("dump_var");
-    pub const DUMPER_ARITY: usize = 4;
 
     // A new, empty function
     pub fn new(debug: bool) -> Self {

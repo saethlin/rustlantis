@@ -964,7 +964,6 @@ impl GenerationCtx {
 
     fn insert_dump_var_gadget(&mut self) {
         let unit = self.declare_new_var(Mutability::Not, TyCtxt::UNIT);
-        let unit2 = self.declare_new_var(Mutability::Not, TyCtxt::UNIT);
 
         let dumpable: Vec<Local> = self
             .current_fn()
@@ -986,35 +985,15 @@ impl GenerationCtx {
             .set_terminator(Terminator::Goto { target: new_bb });
         self.enter_bb(new_bb);
 
-        for vars in dumpped.chunks(Program::DUMPER_ARITY) {
+        for var in dumpped {
             let new_bb = self.add_new_bb();
 
-            let args = if self.program.use_debug_dumper {
-                let mut args = Vec::with_capacity(1 + Program::DUMPER_ARITY * 2);
-                args.push(Operand::Constant(
-                    self.cursor.function.index().try_into().unwrap(),
-                ));
-                for var in vars {
-                    args.push(Operand::Constant(var.index().try_into().unwrap()));
-                    args.push(Operand::Move(Place::from_local(*var)));
-                }
+            let args = vec![
+                Operand::Constant(self.cursor.function.index().try_into().unwrap()),
+                Operand::Constant(var.index().try_into().unwrap()),
+                Operand::Move(Place::from_local(var)),
+            ];
 
-                while args.len() < 1 + Program::DUMPER_ARITY * 2 {
-                    args.push(Operand::Constant(unit2.index().try_into().unwrap()));
-                    args.push(Operand::Copy(Place::from_local(unit2)));
-                }
-                args
-            } else {
-                let mut args = Vec::with_capacity(Program::DUMPER_ARITY);
-                for var in vars {
-                    args.push(Operand::Move(Place::from_local(*var)));
-                }
-
-                while args.len() < Program::DUMPER_ARITY {
-                    args.push(Operand::Copy(Place::from_local(unit2)));
-                }
-                args
-            };
             self.current_bb_mut().set_terminator(Terminator::Call {
                 callee: Program::DUMPER_CALL,
                 destination: Place::from_local(unit),
