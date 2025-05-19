@@ -146,24 +146,21 @@ fn make_tempfile(target: &mut Option<TempDir>) -> PathBuf {
 
 fn run_compile_command(mut command: Command, source: &str) -> process::Output {
     command.arg("-").stdin(Stdio::piped());
-    let mut child = command
+    let mut compiler = command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .expect("can spawn compiler");
-    child
+    compiler
         .stdin
         .as_mut()
         .unwrap()
         .write_all(source.as_bytes())
         .unwrap();
-    let compiler = child;
 
-    let compile_out = compiler
+    compiler
         .wait_with_output()
-        .expect("can execute rustc and get output");
-
-    compile_out
+        .expect("can execute rustc and get output")
 }
 
 struct LLVM {
