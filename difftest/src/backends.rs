@@ -77,12 +77,21 @@ pub fn from_config(config: Config) -> HashMap<String, Box<dyn Backend>> {
             BackendConfig::Miri { toolchain, flags } => {
                 Box::new(Miri::from_rustup(toolchain, flags).unwrap())
             }
+            BackendConfig::MiriRepo { path, flags } => {
+                Box::new(Miri::from_repo(path, flags).unwrap())
+            }
             BackendConfig::LLVM { toolchain, flags } => Box::new(LLVM::new(toolchain, flags)),
             BackendConfig::Cranelift { toolchain, flags } => {
                 Box::new(Cranelift::from_rustup(toolchain, flags))
             }
-            BackendConfig::GCC { repo, flags } => {
-                Box::new(GCC::from_built_repo(repo, flags).unwrap())
+            BackendConfig::CraneliftRepo { path, flags } => {
+                Box::new(Cranelift::from_repo(path, flags).unwrap())
+            }
+            BackendConfig::CraneliftBinary { path, flags } => {
+                Box::new(Cranelift::from_binary(path, flags))
+            }
+            BackendConfig::GCC { path, flags } => {
+                Box::new(GCC::from_built_repo(path, flags).unwrap())
             }
             BackendConfig::LLUBI {
                 toolchain,
@@ -157,13 +166,13 @@ fn run_compile_command(mut command: Command, source: &str) -> process::Output {
     compile_out
 }
 
-pub struct LLVM {
+struct LLVM {
     toolchain: String,
     flags: Vec<String>,
 }
 
 impl LLVM {
-    pub fn new(toolchain: String, flags: Vec<String>) -> Self {
+    fn new(toolchain: String, flags: Vec<String>) -> Self {
         Self { toolchain, flags }
     }
 }
@@ -185,14 +194,14 @@ impl Backend for LLVM {
     }
 }
 
-pub struct LLUBI {
+struct LLUBI {
     toolchain: String,
     llubi_path: String,
     flags: Vec<String>,
 }
 
 impl LLUBI {
-    pub fn new(toolchain: String, llubi_path: String, flags: Vec<String>) -> Self {
+    fn new(toolchain: String, llubi_path: String, flags: Vec<String>) -> Self {
         Self {
             toolchain,
             llubi_path,
@@ -242,7 +251,7 @@ enum BackendSource {
     Rustup(String),
 }
 
-pub struct Miri {
+struct Miri {
     miri: BackendSource,
     sysroot: PathBuf,
     flags: Vec<String>,
@@ -296,7 +305,7 @@ impl Miri {
         Ok(sysroot)
     }
 
-    pub fn from_repo<P: AsRef<Path>>(
+    fn from_repo<P: AsRef<Path>>(
         miri_dir: P,
         flags: Vec<String>,
     ) -> Result<Self, BackendInitError> {
@@ -347,7 +356,7 @@ impl Miri {
         })
     }
 
-    pub fn from_rustup(toolchain: String, flags: Vec<String>) -> Result<Self, BackendInitError> {
+    fn from_rustup(toolchain: String, flags: Vec<String>) -> Result<Self, BackendInitError> {
         let sysroot = match std::env::var("MIRI_SYSROOT") {
             Ok(s) => PathBuf::from(s),
             Err(_) => Self::find_sysroot(&BackendSource::Rustup(toolchain.to_owned()))?,
@@ -389,13 +398,13 @@ impl Backend for Miri {
     }
 }
 
-pub struct Cranelift {
+struct Cranelift {
     clif: BackendSource,
     flags: Vec<String>,
 }
 
 impl Cranelift {
-    pub fn from_repo<P: AsRef<Path>>(
+    fn from_repo<P: AsRef<Path>>(
         clif_dir: P,
         flags: Vec<String>,
     ) -> Result<Self, BackendInitError> {
@@ -436,14 +445,14 @@ impl Cranelift {
         })
     }
 
-    pub fn from_binary<P: AsRef<Path>>(binary_path: P, flags: Vec<String>) -> Self {
+    fn from_binary<P: AsRef<Path>>(binary_path: P, flags: Vec<String>) -> Self {
         Self {
             clif: BackendSource::Path(binary_path.as_ref().to_owned()),
             flags,
         }
     }
 
-    pub fn from_rustup(toolchain: String, flags: Vec<String>) -> Self {
+    fn from_rustup(toolchain: String, flags: Vec<String>) -> Self {
         Self {
             clif: BackendSource::Rustup(toolchain),
             flags,
@@ -470,7 +479,7 @@ impl Backend for Cranelift {
     }
 }
 
-pub struct GCC {
+struct GCC {
     library: PathBuf,
     sysroot: PathBuf,
     repo: PathBuf,
@@ -478,7 +487,7 @@ pub struct GCC {
 }
 
 impl GCC {
-    pub fn from_built_repo<P: AsRef<Path>>(
+    fn from_built_repo<P: AsRef<Path>>(
         cg_gcc: P,
         flags: Vec<String>,
     ) -> Result<Self, BackendInitError> {

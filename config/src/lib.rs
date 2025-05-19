@@ -15,13 +15,18 @@ pub struct Config {
 }
 
 #[derive(Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 #[serde(tag = "type")]
 pub enum BackendConfig {
     Miri {
         toolchain: String,
         flags: Vec<String>,
     },
+    MiriRepo {
+        path: String,
+        flags: Vec<String>,
+    },
+    #[serde(rename = "llvm")]
     LLVM {
         toolchain: String,
         flags: Vec<String>,
@@ -30,10 +35,20 @@ pub enum BackendConfig {
         toolchain: String,
         flags: Vec<String>,
     },
-    GCC {
-        repo: String,
+    CraneliftRepo {
+        path: String,
         flags: Vec<String>,
     },
+    CraneliftBinary {
+        path: String,
+        flags: Vec<String>,
+    },
+    #[serde(rename = "gcc")]
+    GCC {
+        path: String,
+        flags: Vec<String>,
+    },
+    #[serde(rename = "llubi")]
     LLUBI {
         toolchain: String,
         llubi_path: String,
@@ -98,4 +113,9 @@ fn max_args_count() -> usize {
 
 fn var_dump_chance() -> f32 {
     0.5
+}
+
+#[test]
+fn example_parses() {
+    let _ = load("../config.toml.example");
 }

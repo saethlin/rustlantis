@@ -5,8 +5,7 @@ pub mod backends;
 
 use std::{
     collections::{HashMap, HashSet},
-    fmt::{self, Display},
-    path::PathBuf,
+    fmt::{self},
     time::Instant,
 };
 
@@ -14,27 +13,13 @@ use backends::{Backend, CompExecError, ExecResult};
 use colored::Colorize;
 use log::{debug, log_enabled};
 
-pub enum Source {
-    File(PathBuf),
-    Stdin(String),
-}
-
-impl Display for Source {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Source::File(path) => f.write_str(&path.to_string_lossy()),
-            Source::Stdin(_) => f.write_str("[stdin]"),
-        }
-    }
-}
-
 pub struct ExecResults {
     // Equivalence classes of exec results and backends
     results: HashMap<ExecResult, HashSet<String>>,
 }
 
 impl ExecResults {
-    pub fn from_exec_results<'a>(map: impl Iterator<Item = (String, ExecResult)>) -> Self {
+    fn from_exec_results<'a>(map: impl Iterator<Item = (String, ExecResult)>) -> Self {
         //TODO: optimisation here to check if all results are equal directly, since most should be
 
         // Split execution results into equivalent classes
