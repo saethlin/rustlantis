@@ -13,17 +13,19 @@ fn main() -> ExitCode {
     env_logger::init();
 
     let matches = Command::new("difftest")
-        .arg(Arg::new("file").required(true))
-        .arg(
-            Arg::new("reduce")
-                .long("reduce")
-                .action(clap::ArgAction::SetTrue),
-        )
+        .arg(Arg::new("file").required(true).env("DIFFTEST_FILE"))
         .get_matches();
     let source = matches.get_one::<String>("file").expect("required");
-    let reduce = matches.get_flag("reduce");
+    let reduce = match std::env::var("DIFFTEST_REDUCE")
+        .as_ref()
+        .map(String::as_str)
+    {
+        Ok("1" | "true" | "yes") => true,
+        Err(_) | Ok(_) => false,
+    };
 
-    let config = config::load("config.toml");
+    let config_path = std::env::var("RUSTLANTIS_CONFIG").unwrap_or("config.toml".to_string());
+    let config = config::load(config_path);
     let backends = backends::from_config(config);
 
     let code = if source == "-" {
@@ -52,6 +54,7 @@ fn main() -> ExitCode {
         let miri_result = results.miri_result().unwrap();
         if miri_result.is_err() {
             info!("Miri did not pass, so this input must not be interesting");
+            debug!("{:?}", miri_result);
             return ExitCode::FAILURE;
         }
         // And we need something different.

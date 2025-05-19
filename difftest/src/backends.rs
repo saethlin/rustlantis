@@ -363,7 +363,7 @@ impl Miri {
 
 impl Backend for Miri {
     fn execute(&self, source: &str, _: &mut Option<TempDir>) -> ExecResult {
-        debug!("Executing with Miri {source}");
+        debug!("Executing with Miri");
         let mut command = match &self.miri {
             BackendSource::Path(binary) => Command::new(binary),
             BackendSource::Rustup(toolchain) => {
