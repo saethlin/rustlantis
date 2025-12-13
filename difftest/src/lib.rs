@@ -13,7 +13,6 @@ use std::{
 use backends::{Backend, CompExecError, ExecResult};
 use colored::Colorize;
 use log::{debug, log_enabled};
-use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
 pub enum Source {
     File(PathBuf),
@@ -157,22 +156,20 @@ pub fn run_diff_test<'a>(
     backends: HashMap<String, Box<dyn Backend + 'a>>,
 ) -> ExecResults {
     let target_dir = tempfile::tempdir().unwrap();
-    let exec_results: HashMap<String, ExecResult> = backends
-        .into_par_iter()
-        .map(|(name, b)| {
-            let target_path = target_dir.path().join(&name);
-            let result = if log_enabled!(log::Level::Debug) {
-                let time = Instant::now();
-                let result = b.execute(source, &target_path);
-                let dur = time.elapsed();
-                debug!("{name} took {}s", dur.as_secs_f32());
-                result
-            } else {
-                b.execute(source, &target_path)
-            };
-            (name.clone(), result)
-        })
-        .collect();
+    let mut results = Vec::new();
+    for (name, backend) in backends {
+        let target_path = target_dir.path().join(&name);
+        let result = if log_enabled!(log::Level::Debug) {
+            let time = Instant::now();
+            let result = backend.execute(source, &target_path);
+            let dur = time.elapsed();
+            debug!("{name} took {}s", dur.as_secs_f32());
+            result
+        } else {
+            backend.execute(source, &target_path)
+        };
+        results.push((name, result));
+    }
 
-    ExecResults::from_exec_results(exec_results.into_iter())
+    ExecResults::from_exec_results(results.into_iter())
 }
