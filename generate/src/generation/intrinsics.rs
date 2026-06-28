@@ -32,23 +32,55 @@ pub trait CoreIntrinsic {
     }
 }
 
-struct Fmaf64;
-impl CoreIntrinsic for Fmaf64 {
+/// A floating-point math intrinsic whose operands and destination all share
+/// the same float type `ty`, taking `arity` operands, e.g. `sqrtf64` (arity 1),
+/// `minimumf32` (arity 2), or `fmaf64` (arity 3).
+///
+/// Only deterministic operations are modelled here. Operations that Miri treats
+/// as non-deterministic (the transcendental functions such as `sinf64`, the
+/// `*_fast`/`*_algebraic` variants, `fmuladd`, and the sign-of-zero-ignoring
+/// `*_nsz` min/max) are deliberately excluded, as non-determinism is
+/// incompatible with difftesting. `copysign` is also excluded because it would
+/// expose the non-deterministic sign bit of a computed NaN.
+struct FloatMathIntrinsic {
+    name: &'static str,
+    ty: TyId,
+    arity: usize,
+}
+impl CoreIntrinsic for FloatMathIntrinsic {
     fn name(&self) -> &'static str {
-        "fmaf64"
+        self.name
     }
 
     fn dest_type(&self, ty: TyId, _: &TyCtxt) -> bool {
-        ty == TyCtxt::F64
+        ty == self.ty
     }
 
     fn choose_operands(&self, ctx: &GenerationCtx, dest: &Place) -> Option<Vec<Operand>> {
-        let a = ctx.choose_operand(&[TyCtxt::F64], dest).ok()?;
-        let b = ctx.choose_operand(&[TyCtxt::F64], dest).ok()?;
-        let c = ctx.choose_operand(&[TyCtxt::F64], dest).ok()?;
-        Some(vec![a, b, c])
+        let mut args = Vec::with_capacity(self.arity);
+        for _ in 0..self.arity {
+            args.push(ctx.choose_operand(&[self.ty], dest).ok()?);
+        }
+        Some(args)
     }
 }
+
+/// The set of deterministic floating-point math intrinsics, as
+/// `(f32 name, f64 name, arity)`. Some are spelled with an `f32`/`f64` suffix
+/// while others (e.g. `fabs`) are generic and rely on inference from the
+/// operand types; both are emitted verbatim after `core::intrinsics::`.
+const FLOAT_MATH_INTRINSICS: &[(&str, &str, usize)] = &[
+    ("sqrtf32", "sqrtf64", 1),
+    ("fabs", "fabs", 1),
+    ("floorf32", "floorf64", 1),
+    ("ceilf32", "ceilf64", 1),
+    ("truncf32", "truncf64", 1),
+    ("roundf32", "roundf64", 1),
+    ("round_ties_even_f32", "round_ties_even_f64", 1),
+    ("minimumf32", "minimumf64", 2),
+    ("maximumf32", "maximumf64", 2),
+    ("fmaf32", "fmaf64", 3),
+];
 
 pub(super) struct ArithOffset;
 impl CoreIntrinsic for ArithOffset {
@@ -100,10 +132,32 @@ impl CoreIntrinsic for ArithOffset {
     }
 }
 
-struct Bswap;
-impl CoreIntrinsic for Bswap {
+/// Every primitive integer type. Used to pick an operand of an arbitrary
+/// integer type for intrinsics whose argument type is independent of (or merely
+/// constrained relative to) the destination type.
+const INT_TYS: [TyId; 12] = [
+    TyCtxt::ISIZE,
+    TyCtxt::I8,
+    TyCtxt::I16,
+    TyCtxt::I32,
+    TyCtxt::I64,
+    TyCtxt::I128,
+    TyCtxt::USIZE,
+    TyCtxt::U8,
+    TyCtxt::U16,
+    TyCtxt::U32,
+    TyCtxt::U64,
+    TyCtxt::U128,
+];
+
+/// An integer intrinsic of shape `fn(T) -> T` over any integer type, e.g.
+/// `bswap` or `bitreverse`.
+struct IntUnaryOp {
+    name: &'static str,
+}
+impl CoreIntrinsic for IntUnaryOp {
     fn name(&self) -> &'static str {
-        "bswap"
+        self.name
     }
 
     fn dest_type(&self, ty: TyId, tcx: &TyCtxt) -> bool {
@@ -115,6 +169,74 @@ impl CoreIntrinsic for Bswap {
             .choose_operand(&[dest.ty(ctx.current_decls(), &ctx.tcx)], dest)
             .ok()?;
         Some(vec![arg])
+    }
+}
+
+/// An integer intrinsic of shape `fn(T, T) -> T` over any integer type, e.g.
+/// `wrapping_add` or `saturating_sub`. Both operands share the destination
+/// type.
+struct IntBinOp {
+    name: &'static str,
+}
+impl CoreIntrinsic for IntBinOp {
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn dest_type(&self, ty: TyId, tcx: &TyCtxt) -> bool {
+        matches!(ty.kind(tcx), TyKind::Int(..) | TyKind::Uint(..))
+    }
+
+    fn choose_operands(&self, ctx: &GenerationCtx, dest: &Place) -> Option<Vec<Operand>> {
+        let ty = dest.ty(ctx.current_decls(), &ctx.tcx);
+        let a = ctx.choose_operand(&[ty], dest).ok()?;
+        let b = ctx.choose_operand(&[ty], dest).ok()?;
+        Some(vec![a, b])
+    }
+}
+
+/// A bit-counting intrinsic of shape `fn(T) -> u32`, e.g. `ctpop`, `ctlz`, or
+/// `cttz`. The operand may be any integer type, independent of the `u32`
+/// destination. The `_nonzero` variants are excluded as they are UB on zero.
+struct IntBitCount {
+    name: &'static str,
+}
+impl CoreIntrinsic for IntBitCount {
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn dest_type(&self, ty: TyId, _: &TyCtxt) -> bool {
+        ty == TyCtxt::U32
+    }
+
+    fn choose_operands(&self, ctx: &GenerationCtx, dest: &Place) -> Option<Vec<Operand>> {
+        let arg = ctx.choose_operand(&INT_TYS, dest).ok()?;
+        Some(vec![arg])
+    }
+}
+
+/// A rotate intrinsic of shape `fn(T, u32) -> T` over any integer type, i.e.
+/// `rotate_left` or `rotate_right`. The value shares the destination type; the
+/// shift amount is always a `u32`.
+struct IntRotate {
+    name: &'static str,
+}
+impl CoreIntrinsic for IntRotate {
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn dest_type(&self, ty: TyId, tcx: &TyCtxt) -> bool {
+        matches!(ty.kind(tcx), TyKind::Int(..) | TyKind::Uint(..))
+    }
+
+    fn choose_operands(&self, ctx: &GenerationCtx, dest: &Place) -> Option<Vec<Operand>> {
+        let value = ctx
+            .choose_operand(&[dest.ty(ctx.current_decls(), &ctx.tcx)], dest)
+            .ok()?;
+        let shift = ctx.choose_operand(&[TyCtxt::U32], dest).ok()?;
+        Some(vec![value, shift])
     }
 }
 
@@ -175,12 +297,43 @@ impl CoreIntrinsic for Transmute {
 
 impl GenerationCtx {
     pub fn choose_intrinsic(&self, dest: &Place) -> Result<(Callee, Vec<Operand>)> {
-        let choices: [Box<dyn CoreIntrinsic>; 4] = [
-            Box::new(Fmaf64),
+        let mut choices: Vec<Box<dyn CoreIntrinsic>> = vec![
             Box::new(ArithOffset),
-            Box::new(Bswap),
             Box::new(Transmute),
         ];
+        for &(f32_name, f64_name, arity) in FLOAT_MATH_INTRINSICS {
+            choices.push(Box::new(FloatMathIntrinsic {
+                name: f32_name,
+                ty: TyCtxt::F32,
+                arity,
+            }));
+            choices.push(Box::new(FloatMathIntrinsic {
+                name: f64_name,
+                ty: TyCtxt::F64,
+                arity,
+            }));
+        }
+        // Deterministic integer intrinsics. The `_nonzero` bit-counting
+        // variants, `exact_div`, the `unchecked_*` family and `disjoint_bitor`
+        // are excluded because they carry safety preconditions (UB if violated).
+        for name in ["bswap", "bitreverse"] {
+            choices.push(Box::new(IntUnaryOp { name }));
+        }
+        for name in ["ctpop", "ctlz", "cttz"] {
+            choices.push(Box::new(IntBitCount { name }));
+        }
+        for name in [
+            "wrapping_add",
+            "wrapping_sub",
+            "wrapping_mul",
+            "saturating_add",
+            "saturating_sub",
+        ] {
+            choices.push(Box::new(IntBinOp { name }));
+        }
+        for name in ["rotate_left", "rotate_right"] {
+            choices.push(Box::new(IntRotate { name }));
+        }
 
         let intrinsic = self.make_choice(choices.iter(), Result::Ok)?;
         intrinsic.generate_terminator(self, dest)

@@ -7,7 +7,11 @@ tuples, references, raw pointers, structs, and enums.
 - Functions containing multiple basic blocks
 - Terminators: `Goto`, `Return`, `SwitchInt` (`match`), `Call`.
 - Intrinsic functions: `arith_offset` (for pointer arithmetics), `transmute`,
-`bswap`, `fmaf64`.
+the deterministic floating-point math intrinsics (`sqrt`, `fabs`, `floor`,
+`ceil`, `trunc`, `round`, `round_ties_even`, `minimum`, `maximum`, and `fma`)
+for `f32` and `f64`, and the deterministic integer intrinsics (`bswap`,
+`bitreverse`, `ctpop`, `ctlz`, `cttz`, `wrapping_{add,sub,mul}`,
+`saturating_{add,sub}`, `rotate_left`, and `rotate_right`).
 - Operators: all arithmetic, logical and bitwise operations on integers
 and floating points, and checked arithmetic (Add, Sub, Mul) on integers
 - All primitive literal expressions, as well as tuple, array, and struct

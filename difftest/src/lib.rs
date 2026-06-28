@@ -13,7 +13,6 @@ use std::{
 use backends::{Backend, CompExecError, ExecResult};
 use colored::Colorize;
 use log::{debug, log_enabled};
-use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
 pub enum Source {
     File(PathBuf),
@@ -158,7 +157,7 @@ pub fn run_diff_test<'a>(
 ) -> ExecResults {
     let target_dir = tempfile::tempdir().unwrap();
     let exec_results: HashMap<String, ExecResult> = backends
-        .into_par_iter()
+        .into_iter()
         .map(|(name, b)| {
             let target_path = target_dir.path().join(&name);
             let result = if log_enabled!(log::Level::Debug) {
