@@ -216,9 +216,12 @@ impl CoreIntrinsic for IntBitCount {
     }
 }
 
-/// A rotate intrinsic of shape `fn(T, u32) -> T` over any integer type, i.e.
-/// `rotate_left` or `rotate_right`. The value shares the destination type; the
-/// shift amount is always a `u32`.
+/// A rotate intrinsic of shape `fn(T, u32) -> T`, i.e. `rotate_left` or
+/// `rotate_right`. The value shares the destination type; the shift amount is
+/// always a `u32`. These intrinsics are bounded by `FunnelShift`, which is only
+/// implemented for the *unsigned* integer types (the signed `iN::rotate_*`
+/// methods cast to unsigned first rather than calling the intrinsic directly),
+/// so signed destinations are rejected.
 struct IntRotate {
     name: &'static str,
 }
@@ -228,7 +231,7 @@ impl CoreIntrinsic for IntRotate {
     }
 
     fn dest_type(&self, ty: TyId, tcx: &TyCtxt) -> bool {
-        matches!(ty.kind(tcx), TyKind::Int(..) | TyKind::Uint(..))
+        matches!(ty.kind(tcx), TyKind::Uint(..))
     }
 
     fn choose_operands(&self, ctx: &GenerationCtx, dest: &Place) -> Option<Vec<Operand>> {
