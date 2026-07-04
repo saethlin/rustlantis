@@ -381,6 +381,19 @@ impl BasicMemory {
         self.allocations[alloc_id].live = false;
     }
 
+    /// Bring a previously-deallocated allocation back to life, modelling a
+    /// fresh `StorageLive` on the same local. Every run is rebuilt uninit so
+    /// that byte contents *and* borrow-stack state are reset to match the fresh
+    /// allocation a real `StorageLive` produces. The `alloc_id` and run layout
+    /// are preserved, so existing `RunPointer`s on the place nodes stay valid.
+    pub fn reallocate(&mut self, alloc_id: AllocId) {
+        let alloc = &mut self.allocations[alloc_id];
+        for run in alloc.runs.iter_mut() {
+            *run = Run::new_uninit(run.size());
+        }
+        alloc.live = true;
+    }
+
     pub fn is_live(&self, alloc_id: AllocId) -> bool {
         self.allocations[alloc_id].live
     }

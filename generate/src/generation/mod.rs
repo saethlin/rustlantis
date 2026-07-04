@@ -481,26 +481,55 @@ impl GenerationCtx {
         local
     }
 
-    #[allow(dead_code)]
     fn generate_storage_live(&self) -> Result<Statement> {
+        // Only vars (never args or RET, which must stay always-live) that are
+        // currently dead — i.e. previously killed by a StorageDead.
         let local = self
-            .current_decls()
-            .indices()
+            .current_fn()
+            .vars_iter()
             .filter(|local| !self.pt.is_place_live(local))
             .choose(&mut *self.rng.borrow_mut())
             .ok_or(SelectionError::Exhausted)?;
         Ok(Statement::StorageLive(local))
     }
 
-    #[allow(dead_code)]
     fn generate_storage_dead(&self) -> Result<Statement> {
+        // Only kill a currently-live var (never args or RET), and conservatively
+        // skip anything whose death could cause UB:
+        //  - a place pointed to by a live ref/ptr (would dangle).
+        //  - a place holding a ptr (its `*deref` would stay selectable while the
+        //    pointer's own storage is dead).
         let local = self
-            .current_decls()
-            .indices()
-            .filter(|local| self.pt.is_place_live(local))
+            .current_fn()
+            .vars_iter()
+            .filter(|local| {
+                self.pt.is_place_live(local)
+                    && !self.pt.is_pointed_to(local)
+                    && !self.pt.contains_ptr(local)
+            })
             .choose(&mut *self.rng.borrow_mut())
             .ok_or(SelectionError::Exhausted)?;
         Ok(Statement::StorageDead(local))
+    }
+
+    /// Ensure a storage-managed local is `StorageLive`d at the function entry.
+    ///
+    /// In Miri's runtime dialect, any local mentioned in a `StorageLive` *or*
+    /// `StorageDead` statement is dead at function entry and must be made live
+    /// before its first use. Rustlantis otherwise models every declared local
+    /// as live from birth and uses it before the reviving StorageLive is
+    /// emitted, so we back-patch a `StorageLive(local)` at the very start of the
+    /// entry block the first time the local becomes storage-managed. The
+    /// program itself is the source of truth (safe across `save`/`restore_ctx`),
+    /// so we only insert if one isn't already present.
+    fn ensure_entry_storage_live(&mut self, local: Local) {
+        let func = self.cursor.function;
+        let entry = self.program.functions[func]
+            .basic_blocks
+            .indices()
+            .next()
+            .expect("function has an entry block");
+        self.program.functions[func].basic_blocks[entry].ensure_leading_storage_live(local);
     }
 
     #[allow(dead_code)]
@@ -546,11 +575,11 @@ impl GenerationCtx {
         let choices_and_weights: Vec<(fn(&GenerationCtx) -> Result<Statement>, usize)> = vec![
             (Self::generate_assign, 20),
             (Self::generate_new_var, 4),
+            (Self::generate_storage_live, self.config.storage_live_weight),
+            (Self::generate_storage_dead, self.config.storage_dead_weight),
             // Not generating SetDiscriminant for now due to niche checks
             // (Self::generate_set_discriminant, 1),
             // (Self::generate_deinit, 1),
-            // (Self::generate_storage_live, 5),
-            // (Self::generate_storage_dead, 2),
         ];
 
         let (choices, weights): (Vec<fn(&GenerationCtx) -> Result<Statement>>, Vec<usize>) =
@@ -574,6 +603,11 @@ impl GenerationCtx {
 
         if !matches!(statement, Statement::Nop) {
             trace!("generated {}", statement.serialize(&self.tcx));
+        }
+        // A local touched by a storage marker is dead at function entry in Miri;
+        // ensure it's StorageLive'd at entry before any use.
+        if let Statement::StorageLive(local) | Statement::StorageDead(local) = &statement {
+            self.ensure_entry_storage_live(*local);
         }
         self.post_generation(&statement);
         self.current_bb_mut().insert_statement(statement);
@@ -1332,10 +1366,12 @@ impl GenerationCtx {
                     }
                 }
                 Statement::StorageLive(local) => {
+                    // The local is already declared (and in the frame) but its
+                    // storage is dead; revive its existing allocation rather
+                    // than allocating a fresh one, which would panic on re-add.
                     let local = *local;
-                    let ty = self.current_decls()[local].ty;
                     actions.push(Box::new(move |pt| {
-                        pt.allocate_local(local, ty);
+                        pt.reallocate_local(local);
                     }));
                 }
                 Statement::StorageDead(local) => {

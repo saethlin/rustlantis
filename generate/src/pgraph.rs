@@ -389,9 +389,23 @@ impl PlaceGraph {
     }
 
     pub fn deallocate_local(&mut self, local: Local) {
-        // FIXME: should we need to remove local from the frame?
+        // We deliberately keep the local in the frame; a later StorageLive
+        // revives the same allocation via `reallocate_local`.
         let pidx = local.to_place_index(self).expect("place exists");
+        // Reset the abstract state to a clean, uninitialised slate before the
+        // storage dies, so a subsequent StorageLive starts fresh. `mark_place_uninit`
+        // writes bytes, so it must run while the storage is still live.
+        self.mark_place_uninit(pidx);
+        self.assign_literal(pidx, None);
         self.memory.deallocate(self.places[pidx].alloc_id);
+    }
+
+    /// Revive a local previously killed by `deallocate_local`, reusing its
+    /// existing allocation and place nodes (whose state was reset on death).
+    /// Models a `StorageLive` on an already-declared local.
+    pub fn reallocate_local(&mut self, local: Local) {
+        let pidx = local.to_place_index(self).expect("place exists");
+        self.memory.reallocate(self.places[pidx].alloc_id);
     }
 
     fn add_place(
@@ -819,6 +833,23 @@ impl PlaceGraph {
             .filter(|pidx| self.ty(pidx).is_ref(&self.tcx))
             .copied()
             .collect()
+    }
+
+    /// Whether any live reference or raw pointer points into this place or its
+    /// subfields. Killing such a place would leave those pointers dangling.
+    pub fn is_pointed_to(&self, p: impl ToPlaceIndex) -> bool {
+        self.subfields(p)
+            .into_iter()
+            .any(|node| !self.pointers_to(node).is_empty())
+    }
+
+    /// Whether this place or any of its subfields is a pointer (reference or
+    /// raw). Killing such a place would leave its `*deref` places selectable
+    /// even though the pointer's own storage is dead.
+    pub fn contains_ptr(&self, p: impl ToPlaceIndex) -> bool {
+        self.subfields(p)
+            .into_iter()
+            .any(|node| self.ty(node).is_any_ptr(&self.tcx))
     }
 
     /// Whether a place contains a reference to a place and its subfields
@@ -1876,5 +1907,58 @@ mod tests {
         pt.place_written(&Place::from_local(int), None);
         assert!(!pt.can_read_through(int_ref_p, int.to_place_index(&pt).unwrap()));
         assert!(!pt.can_write_through(int_ref_p, int.to_place_index(&pt).unwrap()));
+    }
+
+    #[test]
+    fn storage_dead_then_live_cycle() {
+        let tcx = TyCtxt::from_primitives(TyConfig::default());
+        let mut pt = PlaceGraph::new(Rc::new(tcx));
+
+        let local = Local::new(1);
+        pt.allocate_local(local, TyCtxt::I32);
+        pt.mark_place_init(local);
+        assert!(pt.is_place_live(local));
+        assert!(pt.is_place_init(local));
+
+        // StorageDead: storage is freed, so it's neither live nor init.
+        pt.deallocate_local(local);
+        assert!(!pt.is_place_live(local));
+        assert!(!pt.is_place_init(local));
+
+        // StorageLive again: revives the same allocation (must not panic when
+        // re-adding to the frame), leaving it live but uninitialised.
+        pt.reallocate_local(local);
+        assert!(pt.is_place_live(local));
+        assert!(!pt.is_place_init(local));
+
+        // The revived allocation is genuinely usable again (fill asserts live).
+        pt.mark_place_init(local);
+        assert!(pt.is_place_init(local));
+    }
+
+    #[test]
+    fn storage_dead_exclusion_helpers() {
+        let mut tcx = TyCtxt::from_primitives(TyConfig::default());
+        let t_ref = tcx.push(TyKind::Ref(TyCtxt::I32, Mutability::Not));
+        let mut pt = PlaceGraph::new(Rc::new(tcx));
+
+        let int = Local::new(1);
+        pt.allocate_local(int, TyCtxt::I32);
+        pt.mark_place_init(int);
+
+        // int_ref = &int
+        let int_ref = Local::new(2);
+        pt.allocate_local(int_ref, t_ref);
+        pt.set_ref(int_ref, int, None);
+
+        // `int` is pointed to (killing it would dangle `int_ref`), but holds no
+        // pointer itself.
+        assert!(pt.is_pointed_to(int));
+        assert!(!pt.contains_ptr(int));
+
+        // `int_ref` holds a pointer (killing it would leave `*int_ref`
+        // selectable), but nothing points to it.
+        assert!(pt.contains_ptr(int_ref));
+        assert!(!pt.is_pointed_to(int_ref));
     }
 }

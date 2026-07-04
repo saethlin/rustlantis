@@ -81,6 +81,14 @@ pub struct GenerationConfig {
     /// Expected proportion of variables to be dumped
     #[serde(default = "var_dump_chance")]
     pub var_dump_chance: f32,
+
+    /// Weight of the StorageLive statement in the statement-choice table
+    #[serde(default = "storage_live_weight")]
+    pub storage_live_weight: usize,
+
+    /// Weight of the StorageDead statement in the statement-choice table
+    #[serde(default = "storage_dead_weight")]
+    pub storage_dead_weight: usize,
 }
 
 fn bb_max_len() -> usize {
@@ -109,6 +117,14 @@ fn max_args_count() -> usize {
 
 fn var_dump_chance() -> f32 {
     0.5
+}
+
+fn storage_live_weight() -> usize {
+    5
+}
+
+fn storage_dead_weight() -> usize {
+    2
 }
 
 #[derive(Deserialize, Clone)]

@@ -43,6 +43,19 @@ impl BasicBlockData {
         self.statements.push(stmt);
     }
 
+    /// Ensure a `StorageLive(local)` leads this block, inserting one at the
+    /// front if absent. Used to make a storage-managed local (which Miri treats
+    /// as dead at function entry) live before any use in the entry block.
+    pub fn ensure_leading_storage_live(&mut self, local: Local) {
+        let present = self
+            .statements
+            .iter()
+            .any(|s| matches!(s, Statement::StorageLive(l) if *l == local));
+        if !present {
+            self.statements.insert(0, Statement::StorageLive(local));
+        }
+    }
+
     pub fn set_terminator(&mut self, term: Terminator) {
         assert!(matches!(self.terminator, Terminator::Hole));
         self.terminator = term;
@@ -269,7 +282,7 @@ pub enum Statement {
     StorageLive(Local),
     // define!("mir_storage_dead", fn StorageDead<T>(local: T));
     StorageDead(Local),
-    // define!("mir_storage_live", fn StorageLive<T>(local: T));
+    // define!("mir_deinit", fn Deinit<T>(place: T));
     Deinit(Place),
     // define!("mir_set_discriminant", fn SetDiscriminant<T>(place: T, index: u32));
     SetDiscriminant(Place, u32),
